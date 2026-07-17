@@ -307,7 +307,21 @@ function handleLogin(){
   }).catch(function(e){btn.innerHTML=orig;btn.disabled=false;errEl.querySelector('span').textContent='Network error: '+e.message;errEl.style.display='block'});
 }
 function handleLogout(){sessionStorage.removeItem('fv_auth');if(!LOCAL_MODE){API.clearToken();cache={};fileCache={};uploadedMap={}}showPage('loginPage');document.getElementById('passwordInput').value=''}
-function showDashboard(){showPage('dashboardPage');members=LS.get('members',[]);renderMembers(members);updateStats();checkAlerts()}
+function showDashboard(){showPage('dashboardPage');members=LS.get('members',[]);renderMembers(members);updateStats();checkAlerts();armBack()}
+// ===== Hardware/gesture back-button handling (behave like a native app) =====
+var _navArmed=false;
+function armBack(){if(!_navArmed){try{history.pushState({fv:'root'},'')}catch(e){}_navArmed=true}}
+function _repush(){try{history.pushState({fv:'root'},'')}catch(e){}}
+window.addEventListener('popstate',function(){
+  var viewer=document.getElementById('imgViewer');
+  var openModal=document.querySelector('.modal-overlay.active');
+  var sb=document.getElementById('sidebar');
+  if(viewer&&viewer.classList.contains('active')){closeViewer();_repush()}
+  else if(openModal){openModal.classList.remove('active');_repush()}
+  else if(sb&&sb.classList.contains('open')){toggleSidebar(false);_repush()}
+  else if(document.getElementById('memberPage').classList.contains('active')){showDashboard();_repush()}
+  else{history.back()}
+});
 function toggleSidebar(force){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebarOverlay');if(!sb)return;var open=(force===undefined)?!sb.classList.contains('open'):force;sb.classList.toggle('open',open);ov.classList.toggle('open',open);if(open){var u=sessionStorage.getItem('fv_user')||'';var su=document.getElementById('sideUser');if(su)su.textContent=u?('Signed in as '+u):'';var c=document.getElementById('sideAlertCount');if(c){if(allAlerts&&allAlerts.length){c.textContent=allAlerts.length;c.style.display='inline-flex'}else{c.style.display='none'}}}}
 function sidebarSearchInput(v){var s=document.getElementById('searchInput');if(s){s.value=v}if(!document.getElementById('dashboardPage').classList.contains('active'))showDashboard();filterMembers()}
 function sideAction(a){toggleSidebar(false);if(a==='add')openMemberModal();else if(a==='home')showDashboard();else if(a==='alerts')showStatDetail('alerts');else if(a==='logout')handleLogout()}
