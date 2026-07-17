@@ -458,9 +458,14 @@ var _origShowDashboard=showDashboard;
 showDashboard=function(){_origShowDashboard();var grid=document.getElementById('membersGrid');var extra=document.getElementById('dashExtra');if(extra)extra.remove();var html='<div id="dashExtra">'+renderFollowups()+renderExpenseWidget()+renderNotesSection()+'</div>';grid.insertAdjacentHTML('beforebegin',html);renderFAB()};
 
 // INIT
+function showBootLoader(on){var el=document.getElementById('bootLoader');if(on){if(!el){el=document.createElement('div');el.id='bootLoader';el.style.cssText='position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--bg)';el.innerHTML='<div class="logo-icon" style="width:60px;height:60px;font-size:1.6rem"><i class="fas fa-shield-halved"></i></div><div class="spinner"></div><div style="color:var(--text-dim);font-size:.85rem">Loading your vault…</div>';document.body.appendChild(el)}el.style.display='flex'}else if(el){el.remove()}}
 if(sessionStorage.getItem('fv_auth')==='1'){
   if(LOCAL_MODE){showDashboard()}
-  else if(API.token){bootstrap().then(function(ok){if(ok){showDashboard()}else{sessionStorage.removeItem('fv_auth');API.clearToken();showPage('loginPage')}})}
+  else if(API.token){
+    document.getElementById('loginPage').classList.remove('active');
+    showBootLoader(true);
+    bootstrap().then(function(ok){showBootLoader(false);if(ok){showDashboard()}else{sessionStorage.removeItem('fv_auth');API.clearToken();showPage('loginPage')}}).catch(function(){showBootLoader(false);sessionStorage.removeItem('fv_auth');API.clearToken();showPage('loginPage')});
+  }
   else{sessionStorage.removeItem('fv_auth')}
 }
 </script>
