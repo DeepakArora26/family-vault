@@ -101,8 +101,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 // ============================================================
 // CONFIGURATION — Edit these two lines for Google Mode:
 // ============================================================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwkYJ7oMfbM_awqocG3LJmbQ6B4nwuMyfhtGJ6HeZZJfRPh8yK9dYhGjcdN37TnxpMA7A/exec';  // ← Paste your Google Apps Script Web App URL here
-const LOCAL_MODE = !APPS_SCRIPT_URL;  // Automatically uses Google mode when URL is set
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwI4A32MC4NMgJcAgQIMRfXczbKx_JOpsQdpK1Rj_-U60bgdBiVL9U-elWvEOweRCUhhQ/exec';
+// Google mode when a valid Apps Script URL is set; otherwise local (localStorage) mode.
+const LOCAL_MODE = !APPS_SCRIPT_URL || !/^https:\/\/script\.google\.com\//.test(APPS_SCRIPT_URL);
 // ============================================================
 
 // FamilyVault - Complete App
