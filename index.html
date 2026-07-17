@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>FamilyVault</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0a1a">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FamilyVault">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -83,9 +91,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .health-chip{padding:10px 14px;border-radius:var(--radius-xs);background:rgba(255,255,255,.03);display:flex;align-items:center;gap:8px;font-size:.82rem}.health-chip i{font-size:.9rem}.health-chip.good i{color:var(--accent2)}.health-chip.warn i{color:var(--warning)}.health-chip.bad i{color:var(--danger)}
 .chart-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}.chart-filter button{padding:5px 12px;border:1px solid var(--glass-border);border-radius:20px;background:transparent;color:var(--text-dim);font-family:inherit;font-size:.72rem;cursor:pointer;transition:var(--transition)}.chart-filter button:hover{border-color:var(--accent);color:var(--text)}.chart-filter button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 /* ===== document viewer ===== */
-.img-viewer iframe{width:90vw;height:80vh;border:none;border-radius:var(--radius);background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.img-viewer #viewerPdf{width:90vw;max-width:840px;height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:var(--radius);background:rgba(0,0,0,.2);padding:8px}
 .img-viewer #viewerMsg{background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius);padding:40px 30px;max-width:360px}
-@media(max-width:768px){.img-viewer iframe{width:96vw;height:74vh}}
+@media(max-width:768px){.img-viewer #viewerPdf{width:96vw;height:78vh}}
 /* ===== responsive helper grids ===== */
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -129,7 +137,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 <div class="img-viewer" id="imgViewer" onclick="if(event.target===this)closeViewer()">
   <div class="viewer-name" id="viewerName"></div>
   <img id="viewerImg" src="" style="display:none">
-  <iframe id="viewerFrame" style="display:none"></iframe>
+  <div id="viewerPdf" style="display:none"></div>
   <div id="viewerMsg" style="display:none;text-align:center;color:var(--text-dim)"></div>
   <div class="viewer-actions">
     <button class="btn btn-primary" onclick="downloadViewer()"><i class="fas fa-download"></i> Download</button>
@@ -316,22 +324,51 @@ function doDelete(){var mid=currentMember.id;var all=LS.get('members',[]).filter
 // IMAGE VIEWER
 var _viewer={url:'',name:'document',fileName:'document'};
 function dataUrlToBlobUrl(dataUrl){var parts=dataUrl.split(',');var mime=(parts[0].match(/data:([^;]+)/)||[])[1]||'application/octet-stream';var bin=atob(parts[1]);var arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return URL.createObjectURL(new Blob([arr],{type:mime}))}
+var _pdfjsLoading=null;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  if(_pdfjsLoading)return _pdfjsLoading;
+  _pdfjsLoading=new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=function(){try{window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';res(window.pdfjsLib)}catch(e){rej(e)}};
+    s.onerror=function(){rej(new Error('Could not load PDF viewer'))};
+    document.head.appendChild(s);
+  });
+  return _pdfjsLoading;
+}
+async function renderPdfInto(dataUrl,container){
+  var lib=await loadPdfJs();
+  var raw=atob(dataUrl.split(',')[1]);var arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+  var pdf=await lib.getDocument({data:arr}).promise;
+  container.innerHTML='';
+  for(var p=1;p<=pdf.numPages;p++){
+    var page=await pdf.getPage(p);
+    var vp=page.getViewport({scale:1.4});
+    var canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;
+    canvas.style.cssText='width:100%;max-width:820px;margin:0 auto 10px;display:block;border-radius:8px;background:#fff';
+    container.appendChild(canvas);
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+  }
+}
 function showViewer(dataUrl,name,fileName){
   if(!dataUrl){toast('Preview not available','info');return}
   var mime=(dataUrl.match(/^data:([^;]+)/)||[])[1]||'';
   _viewer={url:dataUrl,name:name||fileName||'document',fileName:fileName||name||'document'};
-  var img=document.getElementById('viewerImg'),fr=document.getElementById('viewerFrame'),msg=document.getElementById('viewerMsg');
+  var img=document.getElementById('viewerImg'),pdfBox=document.getElementById('viewerPdf'),msg=document.getElementById('viewerMsg');
   document.getElementById('viewerName').textContent=name||fileName||'';
-  img.style.display='none';fr.style.display='none';msg.style.display='none';
-  if(fr.src&&fr.src.indexOf('blob:')===0)URL.revokeObjectURL(fr.src);
-  img.src='';fr.src='';
+  img.style.display='none';pdfBox.style.display='none';msg.style.display='none';
+  img.src='';pdfBox.innerHTML='';
   if(mime.indexOf('image')===0){img.src=dataUrl;img.style.display='block'}
-  else if(mime.indexOf('pdf')>=0){try{fr.src=dataUrlToBlobUrl(dataUrl)}catch(e){fr.src=dataUrl}fr.style.display='block'}
+  else if(mime.indexOf('pdf')>=0){
+    pdfBox.style.display='block';pdfBox.innerHTML='<div class="spinner" style="margin:40px auto"></div>';
+    renderPdfInto(dataUrl,pdfBox).catch(function(){pdfBox.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px">Couldn\'t render the preview here.<br>Tap <b>Download</b> to open the PDF.</div>'});
+  }
   else{msg.innerHTML='<i class="fas fa-file-lines" style="font-size:2.6rem;opacity:.4"></i><p style="margin-top:10px">No inline preview for this file type.<br>Tap <b>Download</b> to open it.</p>';msg.style.display='block'}
   document.getElementById('imgViewer').classList.add('active');
 }
 function openViewer(dataUrl,name){showViewer(dataUrl,name,name)}
-function closeViewer(){document.getElementById('imgViewer').classList.remove('active');document.getElementById('viewerImg').src='';var fr=document.getElementById('viewerFrame');if(fr.src&&fr.src.indexOf('blob:')===0)URL.revokeObjectURL(fr.src);fr.src=''}
+function closeViewer(){document.getElementById('imgViewer').classList.remove('active');document.getElementById('viewerImg').src='';var pb=document.getElementById('viewerPdf');if(pb)pb.innerHTML=''}
 function _bestFileName(){var n=_viewer.name||'document';var ext=(_viewer.fileName||'').match(/\.[^.\/]+$/);if(!/\.[^.\/]+$/.test(n)&&ext)n+=ext[0];return n}
 function downloadViewer(){try{var url=dataUrlToBlobUrl(_viewer.url);var a=document.createElement('a');a.href=url;a.download=_bestFileName();document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url)},4000)}catch(e){var a2=document.createElement('a');a2.href=_viewer.url;a2.download=_bestFileName();a2.click()}}
 function viewFile(docId){var docs=LS.get('docs_'+currentMember.id,[]);var d=docs.find(function(x){return x.id===docId});if(!d)return;if(d.dataUrl){showViewer(d.dataUrl,d.name,d.fileName)}else if(d.url&&d.url!=='#'){window.open(d.url,'_blank')}else{toast('Preview not available','info')}}
