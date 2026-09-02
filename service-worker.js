@@ -1,5 +1,5 @@
 // FamilyVault service worker — offline app shell + asset caching
-const CACHE = 'familyvault-v17';
+const CACHE = 'familyvault-v18';
 const SHELL = [
   './',
   './index.html',
