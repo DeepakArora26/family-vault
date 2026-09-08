@@ -315,6 +315,43 @@ body{--hdr-h:56px}
 .recent-chip:active{transform:scale(.93)}
 .recent-chip .member-avatar{width:54px;height:54px;border-radius:17px}
 .recent-chip span{font-size:.67rem;color:var(--text-dim);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+/* ===================================================================
+   Motion system — spring easings, staggered entrance, tactile feedback
+   =================================================================== */
+:root{--ease-out:cubic-bezier(.16,1,.3,1);--ease-spring:cubic-bezier(.34,1.42,.64,1);--ease-io:cubic-bezier(.65,0,.35,1)}
+@keyframes riseIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+.stagger>*{animation:riseIn .5s var(--ease-out) both}
+.stagger>*:nth-child(1){animation-delay:.02s}.stagger>*:nth-child(2){animation-delay:.06s}
+.stagger>*:nth-child(3){animation-delay:.10s}.stagger>*:nth-child(4){animation-delay:.14s}
+.stagger>*:nth-child(5){animation-delay:.18s}.stagger>*:nth-child(6){animation-delay:.22s}
+.stagger>*:nth-child(7){animation-delay:.26s}.stagger>*:nth-child(8){animation-delay:.30s}
+.stagger>*:nth-child(9){animation-delay:.33s}.stagger>*:nth-child(10){animation-delay:.36s}
+.stagger>*:nth-child(n+11){animation-delay:.39s}
+/* Shimmer skeletons instead of dead grey blocks */
+@keyframes shimmer{100%{transform:translateX(100%)}}
+.tab-skel,.skel{position:relative;overflow:hidden;background:rgba(255,255,255,.05);border-radius:var(--radius-sm);height:56px}
+body.light .tab-skel,body.light .skel{background:rgba(18,20,48,.05)}
+.tab-skel::after,.skel::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);animation:shimmer 1.5s infinite}
+body.light .tab-skel::after,body.light .skel::after{background:linear-gradient(90deg,transparent,rgba(18,20,48,.06),transparent)}
+/* Modal / sheet springs */
+@keyframes ovIn{from{opacity:0}to{opacity:1}}
+.modal-overlay.active{animation:ovIn .22s var(--ease-out)}
+.modal{animation:modalIn .4s var(--ease-spring)!important}
+.sheet{animation:sheetup .38s var(--ease-out)!important}
+/* Tactile press feedback */
+.sec-card,.member-card,.record-card,.med-card,.stat-card{will-change:transform}
+.sec-card:active,.record-card:active{transform:scale(.982)}
+.tab-btn{transition:background .22s var(--ease-out),color .22s var(--ease-out),transform .16s}
+.tab-btn:active{transform:scale(.94)}
+.sheet-item{transition:background .18s,transform .14s}
+.sheet-item:active{transform:scale(.985)}
+@media(max-width:768px){
+  /* iOS-style grabber + drag-to-dismiss affordance */
+  .modal-overlay .modal{padding-top:26px!important}
+  .modal-overlay .modal::before,.sheet::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:3px;background:var(--text-muted);opacity:.5}
+  .sheet{position:relative;padding-top:20px}
+  .modal-overlay .modal{position:relative}
+}
 </style>
 </head>
 <body>
@@ -1221,7 +1258,7 @@ function goMemberTab(tab){var mem=LS.get('members',[]);if(!mem.length){toast('Ad
 function secCard(ico,color,bg,title,sub,pill,pillCol,action){return'<div class="sec-card" onclick="'+action+'"><div class="sec-ico" style="background:'+bg+';color:'+color+'"><i class="fas '+ico+'"></i></div><div class="sec-txt"><h4>'+title+'</h4><p>'+sub+'</p></div>'+(pill?'<span class="sec-pill" style="background:'+(pillCol||'rgba(255,255,255,.07)')+';color:'+(color)+'">'+pill+'</span>':'')+'<i class="fas fa-chevron-right sec-chev"></i></div>'}
 function homeHeroHTML(){var h=new Date().getHours();var greet=h<12?'Good morning':h<17?'Good afternoon':'Good evening';var u='';try{u=localStorage.getItem('fv_user')||''}catch(e){}var r=[];try{r=getReminders()}catch(e){}var urgent=r.filter(function(x){return x.days<=2});var attn=urgent.length?'<div class="attn-card" onclick="openReminders()"><div class="attn-ico"><i class="fas fa-triangle-exclamation"></i></div><div style="flex:1;min-width:0"><h4>'+urgent.length+' item'+(urgent.length>1?'s':'')+' need attention</h4><p>'+esc(urgent.slice(0,2).map(function(x){return x.title}).join(' · ').slice(0,64))+'</p></div><i class="fas fa-chevron-right sec-chev"></i></div>':'';return'<div class="hero"><div class="hero-greet">'+greet+(u?', '+esc(u):'')+'</div><div class="hero-title">Your family vault</div><div class="hero-sub">'+members.length+' member'+(members.length===1?'':'s')+' · '+_allMeds().length+' active medication'+(_allMeds().length===1?'':'s')+'</div></div>'+attn}
 function homeSectionsHTML(){var meds=_allMeds();var low=meds.filter(function(x){return daysLeft(x)<=5}).length;var loans=_allLoans();var emi=0;loans.forEach(function(l){emi+=Number(l.emi)||0});var exp=LS.get('family_expenses',[]);var mth=new Date().toISOString().slice(0,7);var mTot=exp.filter(function(e){return(e.date||'').slice(0,7)===mth}).reduce(function(s,e){return s+(e.amount||0)},0);var rem=[];try{rem=getReminders()}catch(e){}
-return'<div class="sec-head">Manage</div><div class="sec-list">'
+return'<div class="sec-head">Manage</div><div class="sec-list stagger">'
 +secCard('fa-pills','var(--warning)','rgba(255,165,2,.13)','Medications',meds.length?meds.length+' active · stock auto-tracked':'Track doses &amp; stock',low?low+' low':'','rgba(255,71,87,.15)',"goMemberTab('medications')")
 +secCard('fa-chart-line','var(--accent2)','rgba(0,212,170,.13)','Health Readings',_countHealth()?_countHealth()+' readings logged':'BP, sugar, weight &amp; more','','',"goMemberTab('health')")
 +secCard('fa-stethoscope','#6c9dff','rgba(108,157,255,.13)','Doctor Visits','Visits, prescriptions &amp; follow-ups','','',"goMemberTab('visits')")
@@ -1236,7 +1273,7 @@ return'<div class="sec-head">Manage</div><div class="sec-list">'
 +secCard('fa-kit-medical','var(--danger)','rgba(255,71,87,.13)','Emergency Card','Blood group, allergies &amp; contacts','','',"sideAction('emergency')")
 +secCard('fa-note-sticky','var(--accent2)','rgba(0,212,170,.13)','Family Notes',(LS.get('family_notes',[]).length?LS.get('family_notes',[]).length+' note'+(LS.get('family_notes',[]).length>1?'s':''):'Shared notes for everyone'),'','',"openNotes()")
 +'</div>'}
-function showMore(){showPage('morePage');setBnavActive('more');try{armBack()}catch(e){}var u='';try{u=localStorage.getItem('fv_user')||''}catch(e){}var grp=function(t,items){return'<div class="sec-head">'+t+'</div><div class="sec-list">'+items.map(function(i){return secCard(i[0],i[1],i[2],i[3],i[4],'','',i[5])}).join('')+'</div>'};document.getElementById('moreBody').innerHTML='<div class="hero"><div class="hero-greet">Menu</div><div class="hero-title">More</div>'+(u?'<div class="hero-sub">Signed in as '+esc(u)+'</div>':'')+'</div>'
+function showMore(){showPage('morePage');setBnavActive('more');try{armBack()}catch(e){}var u='';try{u=localStorage.getItem('fv_user')||''}catch(e){}var grp=function(t,items){return'<div class="sec-head">'+t+'</div><div class="sec-list stagger">'+items.map(function(i){return secCard(i[0],i[1],i[2],i[3],i[4],'','',i[5])}).join('')+'</div>'};document.getElementById('moreBody').innerHTML='<div class="hero"><div class="hero-greet">Menu</div><div class="hero-title">More</div>'+(u?'<div class="hero-sub">Signed in as '+esc(u)+'</div>':'')+'</div>'
 +grp('Library',[['fa-users','var(--accent)','rgba(108,99,255,.13)','Family Members','View &amp; manage everyone',"showDashboard()"],['fa-box-archive','var(--accent)','rgba(108,99,255,.13)','General Documents','Household paperwork',"renderGeneralDocs()"],['fa-address-book','var(--accent2)','rgba(0,212,170,.13)','Contacts','Doctors, hospitals &amp; more',"openContacts()"]])
 +grp('Health &amp; money',[['fa-triangle-exclamation','var(--danger)','rgba(255,71,87,.13)','Restock Alerts','Medicines running low',"showStatDetail('alerts')"],['fa-indian-rupee-sign','var(--accent)','rgba(108,99,255,.13)','Medical Expenses','Bills, costs &amp; analytics',"openExpenses()"],['fa-hand-holding-dollar','var(--warning)','rgba(255,165,2,.13)','Loans &amp; EMIs','Rates &amp; repayment history',"goMemberTab('loans')"],['fa-note-sticky','var(--accent2)','rgba(0,212,170,.13)','Family Notes','Shared notes for everyone',"openNotes()"]])
 +grp('Reminders',[['fa-bell','var(--accent2)','rgba(0,212,170,.13)','All Reminders','What needs attention',"openReminders()"],['fa-clock','var(--accent2)','rgba(0,212,170,.13)','Custom Reminders','Your own recurring alerts',"openCustomReminders()"],['fa-calendar-days','#6c9dff','rgba(108,157,255,.13)','Calendar','Month view',"(_calMonth=null,openCalendar())"]])
@@ -1255,7 +1292,15 @@ document.addEventListener('touchstart',function(e){if(window.innerWidth>768||(wi
 document.addEventListener('touchmove',function(e){if(!pulling)return;var d=e.touches[0].clientY-startY;var box=ind();if(d<=0){box.style.height='0px';return}box.style.height=Math.min(66,d*.5)+'px';var ic=box.querySelector('i');if(ic)ic.style.transform='rotate('+Math.min(180,d*1.2)+'deg)'},{passive:true});
 document.addEventListener('touchend',function(){if(!pulling)return;pulling=false;var box=ind();var h=parseFloat(box.style.height)||0;var ic=box.querySelector('i');if(h>=46){box.classList.add('spin');if(ic){ic.className='fas fa-rotate';ic.style.transform=''}haptic();setTimeout(function(){fvRefresh();box.classList.remove('spin');box.style.height='0px';if(ic)ic.className='fas fa-arrow-down'},420)}else{box.style.height='0px';if(ic)ic.style.transform=''}},{passive:true})})();
 var _origShowPage2=showPage;showPage=function(id){_origShowPage2(id);try{var bn=document.getElementById('bnav');if(bn)bn.style.display=(id==='loginPage')?'none':'';document.body.classList.remove('hdr-up');updateBnavBadge();if(id==='dashboardPage')setBnavActive('home');else if(id==='morePage')setBnavActive('more');else setBnavActive('')}catch(e){}};
-showDashboard=function(){_origShowDashboard();try{migrateStockAnchors()}catch(e){}var grid=document.getElementById('membersGrid');var extra=document.getElementById('dashExtra');if(extra)extra.remove();var secs=document.getElementById('dashSections');if(secs)secs.remove();var html='<div id="dashExtra">'+homeHeroHTML()+renderOnboarding()+recentHTML()+renderMilestones()+renderFollowups()+'</div>';grid.insertAdjacentHTML('beforebegin',html);grid.insertAdjacentHTML('afterend','<div id="dashSections">'+homeSectionsHTML()+'</div>');var _f=document.getElementById('fab');if(_f)_f.remove();mountAddFab();setBnavActive('home');updateBnavBadge();maybeWhatsNew()};
+// ===== Drag-to-dismiss for bottom sheets & mobile modals (native feel) =====
+(function(){var el=null,startY=0,cur=0,dragging=false;
+function closeIt(s){var ov=s.closest?s.closest('.modal-overlay'):null;if(ov&&ov.id){try{modal(ov.id,false)}catch(e){ov.classList.remove('active')}return}if(ov){ov.classList.remove('active');return}var p=s.parentNode;if(p&&p.classList&&p.classList.contains('sheet-ov'))p.remove()}
+document.addEventListener('touchstart',function(e){if(window.innerWidth>768)return;var t=e.target;if(!t.closest)return;var s=t.closest('.modal-overlay.active .modal, .sheet-ov .sheet');if(!s)return;if(s.scrollTop>0)return;if(t.closest('input,textarea,select,button,a'))return;el=s;startY=e.touches[0].clientY;cur=0;dragging=true;s.style.transition='none'},{passive:true});
+document.addEventListener('touchmove',function(e){if(!dragging||!el)return;var d=e.touches[0].clientY-startY;if(d<0){cur=0;el.style.transform='';return}cur=d;el.style.transform='translateY('+d+'px)';var ov=el.closest('.modal-overlay,.sheet-ov');if(ov)ov.style.opacity=String(Math.max(.35,1-d/460))},{passive:true});
+document.addEventListener('touchend',function(){if(!dragging||!el)return;dragging=false;var s=el;el=null;var ov=s.closest('.modal-overlay,.sheet-ov');s.style.transition='transform .32s cubic-bezier(.16,1,.3,1)';if(ov)ov.style.transition='opacity .3s ease';
+if(cur>110){haptic();s.style.transform='translateY(100%)';if(ov)ov.style.opacity='0';setTimeout(function(){closeIt(s);s.style.transform='';s.style.transition='';if(ov){ov.style.opacity='';ov.style.transition=''}},300)}
+else{s.style.transform='';if(ov)ov.style.opacity='';setTimeout(function(){s.style.transition='';if(ov)ov.style.transition=''},320)}},{passive:true})})();
+showDashboard=function(){_origShowDashboard();try{migrateStockAnchors()}catch(e){}var grid=document.getElementById('membersGrid');var extra=document.getElementById('dashExtra');if(extra)extra.remove();var secs=document.getElementById('dashSections');if(secs)secs.remove();var html='<div id="dashExtra">'+homeHeroHTML()+renderOnboarding()+recentHTML()+renderMilestones()+renderFollowups()+'</div>';grid.insertAdjacentHTML('beforebegin',html);grid.insertAdjacentHTML('afterend','<div id="dashSections">'+homeSectionsHTML()+'</div>');try{grid.classList.add('stagger')}catch(e){}var _f=document.getElementById('fab');if(_f)_f.remove();mountAddFab();setBnavActive('home');updateBnavBadge();maybeWhatsNew()};
 
 // INIT
 // ============================================================
@@ -1322,7 +1367,7 @@ function renderMilestones(){var out=[];var today=new Date();today.setHours(0,0,0
 var _tabOrder=['profile','health','visits','medications','documents','vault','loans'];
 function memberSwitch(dir){if(!currentMember||!members.length)return;var idx=-1;for(var i=0;i<members.length;i++){if(members[i].id===currentMember.id){idx=i;break}}if(idx<0)return;var ni=(idx+dir+members.length)%members.length;if(members[ni])viewMember(members[ni].id)}
 function setupTabSwipe(){var el=document.getElementById('tabContent');if(!el||el._swipe)return;el._swipe=true;var x0=null,y0=null;el.addEventListener('touchstart',function(e){var t=e.touches[0];x0=t.clientX;y0=t.clientY},{passive:true});el.addEventListener('touchend',function(e){if(x0==null)return;var t=e.changedTouches[0];var dx=t.clientX-x0,dy=t.clientY-y0;x0=null;if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.4)return;var i=_tabOrder.indexOf(activeTab);if(i<0)return;if(dx<0&&i<_tabOrder.length-1){switchTab(_tabOrder[i+1])}else if(dx>0&&i>0){switchTab(_tabOrder[i-1])}},{passive:true})}
-function tabSkeleton(){var c=document.getElementById('tabContent');if(c)c.innerHTML='<div class="tab-skel" style="margin-bottom:12px"></div><div class="tab-skel" style="height:80px"></div>'}
+function tabSkeleton(){var c=document.getElementById('tabContent');if(c)c.innerHTML='<div class="skel" style="height:34px;width:52%;margin-bottom:14px"></div><div class="skel" style="height:78px;margin-bottom:11px"></div><div class="skel" style="height:78px;margin-bottom:11px;opacity:.75"></div><div class="skel" style="height:78px;opacity:.5"></div>'}
 function setDocFilter(v){docFilter=v;try{localStorage.setItem('fv_docfilter',v)}catch(e){}docRerender()}
 // ---- Global listeners: shortcuts, privacy blur, paste ----
 document.addEventListener('keydown',function(e){var authed=localStorage.getItem('fv_auth')==='1';if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){if(!authed)return;e.preventDefault();openGlobalSearch()}else if(e.key==='/'&&authed){var tn=(e.target&&e.target.tagName||'').toLowerCase();if(tn==='input'||tn==='textarea'||tn==='select')return;if(document.querySelector('.modal-overlay.active'))return;e.preventDefault();openGlobalSearch()}});
