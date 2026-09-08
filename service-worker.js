@@ -1,13 +1,14 @@
 // FamilyVault service worker — offline app shell + asset caching
-const CACHE = 'familyvault-v19';
+const CACHE = 'familyvault-v20';
 const SHELL = [
   './',
   './index.html',
-  './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-180.png',
-  './favicon.png'
+  './manifest.webmanifest?v=20',
+  './icon-192.png?v=20',
+  './icon-512.png?v=20',
+  './icon-maskable-512.png?v=20',
+  './icon-180.png?v=20',
+  './favicon.png?v=20'
 ];
 
 self.addEventListener('install', function (e) {
