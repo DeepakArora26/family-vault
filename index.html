@@ -418,12 +418,44 @@ const API={
 function isDataUrl(s){return typeof s==='string'&&s.indexOf('data:')===0&&s.length>200}
 var _mimeExt={'image/jpeg':'.jpg','image/jpg':'.jpg','image/png':'.png','image/gif':'.gif','image/webp':'.webp','image/heic':'.heic','application/pdf':'.pdf','image/svg+xml':'.svg'};
 function sanitizeName(n){return (String(n||'file').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()||'file').slice(0,80)}
-async function slimUpload(v,name){
+function memberNameById(mid){var all=LS.get('members',[]);var m=(all||[]).find(function(x){return x&&x.id===mid});return m?m.name:''}
+function metaFromStoreKey(storeKey){
+  if(!storeKey||typeof storeKey!=='string')return {};
+  if(storeKey==='docs_general')return {memberName:'General'};
+  if(storeKey.indexOf('docs_')===0){
+    var mid=storeKey.slice(5);
+    return {memberId:mid,memberName:memberNameById(mid)};
+  }
+  return {};
+}
+function buildUploadMeta(ctx,obj,key){
+  var meta=Object.assign({},ctx||{});
+  if(!meta.memberName&&meta.storeKey){
+    var fromKey=metaFromStoreKey(meta.storeKey);
+    meta.memberId=meta.memberId||fromKey.memberId;
+    meta.memberName=meta.memberName||fromKey.memberName;
+  }
+  if(obj&&typeof obj==='object'){
+    meta.memberId=meta.memberId||obj._memberId||obj.memberId;
+    meta.memberName=meta.memberName||obj._member||obj.memberName||(meta.memberId?memberNameById(meta.memberId):'');
+    meta.category=meta.category||obj.type||obj.category;
+    meta.docType=meta.docType||obj.type||obj.docType;
+    meta.uploadedAt=meta.uploadedAt||obj.date||obj.createdAt;
+  }
+  return meta;
+}
+async function slimUpload(v,name,meta){
   if(uploadedMap[v]) return uploadedMap[v];
   try{
     var mime=v.substring(5,v.indexOf(';'));var b64=v.split(',')[1];
     var base=sanitizeName(name);var ext=_mimeExt[mime]||'';if(ext&&base.toLowerCase().slice(-ext.length)===ext)ext='';
-    var r=await API.uploadFile({base64:b64,mimeType:mime,name:base+ext});
+    var payload={base64:b64,mimeType:mime,name:base+ext};
+    if(meta&&meta.memberName)payload.memberName=meta.memberName;
+    if(meta&&meta.memberId)payload.memberId=meta.memberId;
+    if(meta&&meta.category)payload.category=meta.category;
+    if(meta&&meta.docType)payload.docType=meta.docType;
+    if(meta&&meta.uploadedAt)payload.uploadedAt=meta.uploadedAt;
+    var r=await API.uploadFile(payload);
     if(r&&r.success){var ref='drive:'+r.fileId;uploadedMap[v]=ref;fileCache[r.fileId]=v;return ref}
     toast('File not saved to Drive: '+((r&&r.error)||'check FOLDER_ID / permissions'),'error');
   }catch(e){toast('Drive upload failed: '+e.message,'error')}
@@ -431,20 +463,21 @@ async function slimUpload(v,name){
 }
 // Replace inline base64 (photos/files) with a private Drive reference before saving to the sheet.
 // Files are named after the document's display name (or member name for photos).
-async function slim(v){
-  if(Array.isArray(v)){const out=[];for(const x of v)out.push(await slim(x));return out}
+async function slim(v,ctx){
+  if(Array.isArray(v)){const out=[];for(const x of v)out.push(await slim(x,ctx));return out}
   if(v&&typeof v==='object'){
+    var nextMeta=buildUploadMeta(ctx,v);
     const out={};var nm=v.name||v.fileName||v.type||'';
     for(const k of Object.keys(v)){
       var val=v[k];
-      if(k==='dataUrl'&&isDataUrl(val)){out[k]=await slimUpload(val,nm||'file')}
+      if(k==='dataUrl'&&isDataUrl(val)){out[k]=await slimUpload(val,nm||'file',nextMeta)}
       else if(k==='thumb'){out[k]=val}
-      else if(k==='photo'&&isDataUrl(val)){out[k]=await slimUpload(val,(v.name?v.name+' photo':'photo'))}
-      else out[k]=await slim(val);
+      else if(k==='photo'&&isDataUrl(val)){out[k]=await slimUpload(val,(v.name?v.name+' photo':'photo'),Object.assign({},nextMeta,{category:'Profile Photo',docType:'Profile Photo'}))}
+      else out[k]=await slim(val,nextMeta);
     }
     return out;
   }
-  if(isDataUrl(v)) return await slimUpload(v,'file');
+  if(isDataUrl(v)) return await slimUpload(v,'file',ctx);
   return v;
 }
 // Resolve Drive references back into base64 for display
@@ -492,7 +525,7 @@ function persistKey(k,v){
     if(typeof navigator!=='undefined'&&navigator.onLine===false){setSyncStatus('offline');return}
     setSyncStatus('saving');
     try{
-      const slimmed=await slim(v);
+      const slimmed=await slim(v,{storeKey:k});
       const res=await API.setKey(k,JSON.stringify(slimmed));
       if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();localStorage.removeItem('fv_auth');toast('Session expired. Please log in again.','error');showPage('loginPage')}
       else if(res&&!res.success){setSyncStatus('error');toast('Save failed. Check your connection.','error')}
