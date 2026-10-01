@@ -565,7 +565,7 @@ function _loadDriveImg(img){var ref=img.getAttribute('data-drive');if(!ref)retur
 function prepDriveImg(img){var src=img.getAttribute('src')||'';if(src.indexOf('drive:')!==0)return;img.setAttribute('data-drive',src);img.src=_blankPx;img.classList.add('fade-img');var p=img.parentNode;if(p&&p.classList)p.classList.add('thumb-loading');if(_lazyIO)_lazyIO.observe(img);else _loadDriveImg(img)}
 if(!LOCAL_MODE&&'MutationObserver' in window){new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){var an=muts[i].addedNodes;for(var j=0;j<an.length;j++){var n=an[j];if(!n||n.nodeType!==1)continue;if(n.tagName==='IMG')prepDriveImg(n);if(n.querySelectorAll){var gs=n.querySelectorAll('img');for(var q=0;q<gs.length;q++)prepDriveImg(gs[q])}}}}).observe(document.documentElement,{childList:true,subtree:true})}
 let _persistChain=Promise.resolve();
-function snapStrip(v){if(Array.isArray(v))return v.map(snapStrip);if(v&&typeof v==='object'){var o={};for(var k in v)o[k]=snapStrip(v[k]);return o}if(isDataUrl(v))return '';return v}
+function snapStrip(v,k){if(Array.isArray(v))return v.map(function(x){return snapStrip(x,k)});if(v&&typeof v==='object'){var o={};for(var key in v)o[key]=snapStrip(v[key],key);return o}if(k==='thumb')return v;if(k==='dataUrl'&&typeof v==='string'&&v.indexOf('drive:')===0)return v;if(isDataUrl(v))return '';return v}
 function saveSnapshot(){try{var s={};Object.keys(cache).forEach(function(k){s[k]=snapStrip(cache[k])});localStorage.setItem('fv_snapshot',JSON.stringify(s))}catch(e){}}
 function loadSnapshot(){try{var s=localStorage.getItem('fv_snapshot');if(!s)return false;var d=JSON.parse(s);cache={};Object.keys(d).forEach(function(k){cache[k]=d[k]});return true}catch(e){return false}}
 function persistKey(k,v){
@@ -1194,7 +1194,7 @@ function viewFile(docId,key){key=key||('docs_'+currentMember.id);var docs=LS.get
 
 // VISITS
 function getAttachments(refId){return LS.get('docs_'+currentMember.id,[]).filter(function(d){return d.refId===refId})}
-function attachHTML(refId){var atts=getAttachments(refId);var html='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';if(atts.length){atts.forEach(function(a){var isImg=fileIsImg(a);var ts=thumbSrc(a);if(!ts){console.warn('No thumbnail for attachment',a.id,a.name)}html+='<div class="att-thumb" onclick="event.stopPropagation();viewFile(\''+a.id+'\')" title="'+esc(a.name)+'">'+(ts?'<img src="'+ts+'" alt="" loading="lazy" decoding="async">':'<i class="fas '+(isImg?'fa-image':'fa-file-pdf')+'"></i>')+'</div>'})}html+='<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openAttachModal(\''+refId+'\')" style="height:36px"><i class="fas fa-plus"></i></button></div>';return html}
+function attachHTML(refId){var atts=getAttachments(refId);var html='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';if(atts.length){atts.forEach(function(a){var isImg=fileIsImg(a);var ts=thumbSrc(a);var driveImg=(!ts&&isImg&&typeof a.dataUrl==='string'&&a.dataUrl.indexOf('drive:')===0)?a.dataUrl:'';var src=ts||driveImg;html+='<div class="att-thumb" onclick="event.stopPropagation();viewFile(\''+a.id+'\')" title="'+esc(a.name)+'">'+(src?'<img src="'+src+'" alt="" loading="lazy" decoding="async">':'<i class="fas '+(isImg?'fa-image':'fa-file-pdf')+'"></i>')+'</div>'})}html+='<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openAttachModal(\''+refId+'\')" style="height:36px"><i class="fas fa-plus"></i></button></div>';return html}
 function openAttachModal(refId){document.getElementById('docModalInner').innerHTML='<h2><i class="fas fa-paperclip"></i> Attach File</h2><p style="color:var(--text-dim);font-size:.85rem;margin-bottom:16px">Attach a prescription, report, or image. It will be viewable directly.</p><div class="input-group"><label>Display name (optional)</label><input id="docName" placeholder="e.g. Prescription - 12 Jul" autocomplete="off"></div><div class="file-drop" id="fileDrop" onclick="document.getElementById(\'fi\').click()"><i class="fas fa-cloud-arrow-up"></i><p>Click or drag file here (image/PDF)</p><p class="file-name" id="fn" style="display:none"></p><input type="file" id="fi" accept="image/*,.pdf" style="display:none" onchange="pickFile(event)"></div><div style="margin-bottom:12px"><button class="btn btn-secondary" style="width:100%;justify-content:center" onclick="document.getElementById(\'fiCam\').click()"><i class="fas fa-camera"></i> Take Photo</button><input type="file" id="fiCam" accept="image/*" capture="environment" style="display:none" onchange="pickFile(event)"></div><div id="attPreview" style="display:none;margin-bottom:14px;text-align:center"><img id="attPrevImg" style="max-height:120px;border-radius:8px;border:1px solid var(--glass-border)"></div><div class="modal-actions"><button class="btn btn-secondary" onclick="modal(\'docModal\',false)">Cancel</button><button class="btn btn-primary" onclick="saveAttachment(\''+refId+'\')"><i class="fas fa-upload"></i> Attach</button></div>';selectedFile=null;selectedFileData=null;modal('docModal',true);var fd=document.getElementById('fileDrop');fd.addEventListener('dragover',function(e){e.preventDefault();fd.classList.add('dragover')});fd.addEventListener('dragleave',function(){fd.classList.remove('dragover')});fd.addEventListener('drop',function(e){e.preventDefault();fd.classList.remove('dragover');var f=e.dataTransfer.files[0];if(f)handleAttachFile(f)})}
 var selectedFileData=null;
 function handleAttachFile(f){readFileForUpload(f)}
@@ -1205,9 +1205,37 @@ var visitQueue=[];
 function handleVisitFiles(e){var files=e.target.files;if(!files||!files.length)return;Array.prototype.forEach.call(files,function(f){if(f.size>25*1024*1024){toast(f.name+' too large (max 25MB)','error');return}var r=new FileReader();r.onload=function(){var item={name:f.name.replace(/\.[^.]+$/,''),fileName:f.name,mime:f.type,dataUrl:r.result,thumb:''};visitQueue.push(item);renderVisitQueue();makeThumb(r.result).then(function(t){if(t){item.thumb=t;renderVisitQueue()}})};r.readAsDataURL(f)});e.target.value=''}
 function renderVisitQueue(){var box=document.getElementById('visitQueuePreview');if(!box)return;if(!visitQueue.length){box.innerHTML='';return}box.innerHTML='<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">'+visitQueue.length+' file'+(visitQueue.length>1?'s':'')+' ready · edit a name to make it clear</div>'+visitQueue.map(function(q,i){var img=q.mime&&q.mime.indexOf('image')===0;var ts=q.thumb||q.dataUrl;return'<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:8px;margin-bottom:6px"><div class="att-thumb" style="width:36px;height:36px">'+(img?'<img src="'+ts+'" alt="">':'<i class="fas fa-file-pdf"></i>')+'</div><input class="queue-name" value="'+esc(q.name).replace(/"/g,'&quot;')+'" oninput="visitQueue['+i+'].name=this.value" placeholder="Name this file" title="'+esc(q.fileName||'').replace(/"/g,'&quot;')+'"><button class="btn btn-danger btn-sm" onclick="visitQueue.splice('+i+',1);renderVisitQueue()"><i class="fas fa-xmark"></i></button></div>'}).join('')}
 function handleVisitFile(e){handleVisitFiles(e)}
-function saveVisit(editId){var doctor=document.getElementById('v_doctor').value.trim(),date=document.getElementById('v_date').value;if(!doctor||!date){toast('Doctor & date required','error');return}var data={date:date,doctor:doctor,hospital:document.getElementById('v_hospital').value.trim(),speciality:document.getElementById('v_spec').value,diagnosis:document.getElementById('v_diag').value.trim(),notes:document.getElementById('v_notes').value.trim(),followup:document.getElementById('v_followup').value,linkedFromVisit:document.getElementById('v_linkedfrom').value||''};var visits=LS.get('visits_'+currentMember.id,[]);var v;if(editId){v=Object.assign({},visits.find(function(x){return x.id===editId})||{},data,{id:editId});visits=visits.map(function(x){return x.id===editId?v:x})}else{v=Object.assign({id:'v_'+Date.now()},data);visits.push(v)}// Auto-clear old followup reminders when this visit is on a previous followup date
-// (e.g., if Visit 1 had followup:Oct15, and you add Visit 2 on Oct15, clear Visit 1's followup)
-visits=visits.map(function(x){if(x.id===v.id)return x;if(x.followup===v.date){x=Object.assign({},x);x.followup='';return x}return x});LS.set('visits_'+currentMember.id,visits);if(visitQueue.length){var docs=LS.get('docs_'+currentMember.id,[]);var multi=visitQueue.length>1;console.log('Saving '+visitQueue.length+' files for visit '+v.id);visitQueue.forEach(function(q,i){var nm=(q.name&&q.name.trim())||('Prescription'+(multi?' ('+(i+1)+')':''));var doc={id:'d_'+Date.now()+'_'+i,type:'Prescription',name:nm,fileName:q.fileName||q.name,date:new Date().toISOString(),url:'#',refId:v.id,dataUrl:q.dataUrl,thumb:q.thumb||''};console.log('Adding doc:',doc.id,'with refId:',doc.refId,'name:',doc.name);docs.push(doc)});LS.set('docs_'+currentMember.id,docs);console.log('Saved. Total docs for member: '+docs.length)}modal('visitModal',false);visitQueue=[];renderTab();updateStats();maybeAutoSyncCalendar();toast(editId?'Visit updated!':'Visit recorded!','success')}
+function saveVisit(editId){
+  var doctor=document.getElementById('v_doctor').value.trim(),date=document.getElementById('v_date').value;
+  if(!doctor||!date){toast('Doctor & date required','error');return}
+  var data={date:date,doctor:doctor,hospital:document.getElementById('v_hospital').value.trim(),speciality:document.getElementById('v_spec').value,diagnosis:document.getElementById('v_diag').value.trim(),notes:document.getElementById('v_notes').value.trim(),followup:document.getElementById('v_followup').value,linkedFromVisit:document.getElementById('v_linkedfrom').value||''};
+  var visits=LS.get('visits_'+currentMember.id,[]),v;
+  if(editId){
+    v=Object.assign({},visits.find(function(x){return x.id===editId})||{},data,{id:editId});
+    visits=visits.map(function(x){return x.id===editId?v:x});
+  }else{
+    v=Object.assign({id:'v_'+Date.now()},data);
+    visits.push(v);
+  }
+  // Auto-clear old followup reminders when this visit is on a previous followup date
+  // (e.g., if Visit 1 had followup:Oct15, and you add Visit 2 on Oct15, clear Visit 1's followup)
+  visits=visits.map(function(x){if(x.id===v.id)return x;if(x.followup===v.date){x=Object.assign({},x);x.followup='';return x}return x});
+  LS.set('visits_'+currentMember.id,visits);
+  if(visitQueue.length){
+    var docs=LS.get('docs_'+currentMember.id,[]),multi=visitQueue.length>1;
+    visitQueue.forEach(function(q,i){
+      var nm=(q.name&&q.name.trim())||('Prescription'+(multi?' ('+(i+1)+')':''));
+      docs.push({id:'d_'+Date.now()+'_'+i,type:'Prescription',name:nm,fileName:q.fileName||q.name,date:new Date().toISOString(),url:'#',refId:v.id,dataUrl:q.dataUrl,thumb:q.thumb||''});
+    });
+    LS.set('docs_'+currentMember.id,docs);
+  }
+  modal('visitModal',false);
+  visitQueue=[];
+  renderTab();
+  updateStats();
+  maybeAutoSyncCalendar();
+  toast(editId?'Visit updated!':'Visit recorded!','success');
+}
 function deleteVisit(id){var key='visits_'+currentMember.id;var arr=LS.get(key,[]);var item=arr.find(function(v){return v.id===id});if(!item)return;LS.set(key,arr.filter(function(v){return v.id!==id}));var tid=trashPush('Doctor visit',key,item);renderTab();toastAction('Visit deleted','Undo',function(){trashRestore(tid);renderTab()})}
 
 // MEDICATIONS
