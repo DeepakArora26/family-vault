@@ -410,15 +410,21 @@ const API={
     return false;
   },
   async call(action,params,postBody){
-    const url=new URL(APPS_SCRIPT_URL);
-    url.searchParams.set('action',action);
-    if(this.token) url.searchParams.set('token',this.token);
-    if(params) Object.keys(params).forEach(k=>url.searchParams.set(k,params[k]));
-    const opts={redirect:'follow'};
-    if(postBody){opts.method='POST';opts.headers={'Content-Type':'text/plain'};opts.body=JSON.stringify(postBody)}
-    const resp=await fetch(url.toString(),opts);
-    return await resp.json();
-  },
+     const url=new URL(APPS_SCRIPT_URL);
+     url.searchParams.set('action',action);
+     if(this.token) url.searchParams.set('token',this.token);
+     if(params) Object.keys(params).forEach(k=>url.searchParams.set(k,params[k]));
+     const opts={redirect:'follow'};
+     if(postBody){opts.method='POST';opts.headers={'Content-Type':'text/plain'};opts.body=JSON.stringify(postBody)}
+     const resp=await fetch(url.toString(),opts);
+     const result=await resp.json();
+     // NEW: Capture token refresh from backend
+     if(result&&result.newToken){
+       this.setToken(result.newToken);
+       try{localStorage.setItem('fv_auth',result.newToken)}catch(e){}
+     }
+     return result;
+   },
   login(u,p){return this.call('verifyPassword',{username:u,password:p})},
   getAll(){return this.call('getAll')},
   setKey(key,value){return this.call('setKey',null,{key:key,value:value})},
@@ -510,14 +516,38 @@ async function fatten(v){
   return v;
 }
 // ===== Lazy file loading: keep Drive refs at startup; fetch base64 only when actually shown =====
+// BATCHED queue: download max 5 Drive images at a time to prevent overwhelming weak internet
+var _driveQueue=[],_driveProcessing=0,_driveMaxConcurrent=5,_driveRetries={},_driveMaxRetries=2;
 function resolveDrive(ref){
-  if(!ref||typeof ref!=='string'||ref.indexOf('drive:')!==0)return Promise.resolve(ref);
-  var id=ref.slice(6);
-  if(fileCache[id])return Promise.resolve(fileCache[id]);
-  resolveDrive._p=resolveDrive._p||{};
-  if(resolveDrive._p[id])return resolveDrive._p[id];
-  resolveDrive._p[id]=API.getFile(id).then(function(r){var d=(r&&r.success)?r.data:'';if(d){fileCache[id]=d;uploadedMap[d]=ref}delete resolveDrive._p[id];return d}).catch(function(){delete resolveDrive._p[id];return ''});
-  return resolveDrive._p[id];
+   if(!ref||typeof ref!=='string'||ref.indexOf('drive:')!==0)return Promise.resolve(ref);
+   var id=ref.slice(6);
+   if(fileCache[id])return Promise.resolve(fileCache[id]);
+   resolveDrive._p=resolveDrive._p||{};
+   if(resolveDrive._p[id])return resolveDrive._p[id];
+   resolveDrive._p[id]=new Promise(function(resolveReq){
+     _driveQueue.push({id:id,ref:ref,resolve:resolveReq});
+     _processDriveQueue();
+   });
+   return resolveDrive._p[id];
+}
+function _processDriveQueue(){
+   if(_driveProcessing>=_driveMaxConcurrent||_driveQueue.length===0)return;
+   _driveProcessing++;
+   var item=_driveQueue.shift();
+   var retries=_driveRetries[item.id]||0;
+   API.getFile(item.id).then(function(r){
+     var d=(r&&r.success)?r.data:'';
+     if(d){fileCache[item.id]=d;uploadedMap[d]=item.ref}
+     else if(retries<_driveMaxRetries){_driveRetries[item.id]=(retries+1);_driveQueue.push(item)}
+     _driveProcessing--;
+     item.resolve(d);
+     setTimeout(_processDriveQueue,100);
+   }).catch(function(e){
+     if(retries<_driveMaxRetries){_driveRetries[item.id]=(retries+1);_driveQueue.push(item)}
+     _driveProcessing--;
+     item.resolve('');
+     setTimeout(_processDriveQueue,100);
+   });
 }
 function setImgSrc(imgEl,ref){if(!imgEl)return;if(typeof ref==='string'&&ref.indexOf('drive:')===0){resolveDrive(ref).then(function(d){if(d)imgEl.src=d})}else if(ref){imgEl.src=ref}}
 var _blankPx='data:image/svg+xml;charset=utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%221%22%20height%3D%221%22%3E%3C/svg%3E';
@@ -528,6 +558,7 @@ var _blankPx='data:image/svg+xml;charset=utf8,%3Csvg%20xmlns%3D%22http%3A//www.w
 function makeThumb(dataUrl,maxPx){return new Promise(function(res){try{if(typeof dataUrl!=='string'||!/^data:image\//i.test(dataUrl))return res('');var im=new Image();im.onload=function(){try{var M=maxPx||160,w=im.width,h=im.height;if(!w||!h)return res('');if(w>h){h=Math.round(h*M/w);w=M}else{w=Math.round(w*M/h);h=M}var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);res(c.toDataURL('image/jpeg',.55))}catch(e){res('')}};im.onerror=function(){res('')};im.src=dataUrl}catch(e){res('')}})}
 // Best available *cheap* preview for a record: inline thumb, else an already-inline data URL.
 // Returns '' when the only copy is a remote Drive ref (caller should show an icon instead).
+// Note: old Drive images without thumb will show icon, but backend will backfill within 1-2 min
 function thumbSrc(d){if(!d)return '';if(typeof d.thumb==='string'&&d.thumb.indexOf('data:')===0)return d.thumb;var u=d.dataUrl;if(typeof u==='string'&&u.indexOf('data:')===0)return u;return ''}
 var _lazyIO=('IntersectionObserver' in window)?new IntersectionObserver(function(entries){entries.forEach(function(en){if(en.isIntersecting){var img=en.target;_lazyIO.unobserve(img);_loadDriveImg(img)}})},{rootMargin:'250px'}):null;
 function _loadDriveImg(img){var ref=img.getAttribute('data-drive');if(!ref)return;img.removeAttribute('data-drive');resolveDrive(ref).then(function(d){if(d){img.src=d;img.classList.add('loaded')}var p=img.parentNode;if(p&&p.classList)p.classList.remove('thumb-loading')})}
@@ -552,21 +583,24 @@ function persistKey(k,v){
   return _persistChain;
 }
 async function bootstrap(){
-  let res;
-  try{res=await API.getAll()}catch(e){res=null}
-  if(!res||!res.success){
-    if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();return false}
-    if(loadSnapshot()){setSyncStatus('offline');return true}
-    return false;
-  }
-  const data=res.data||{};
-  cache={};
-  // Fast startup: store values as-is (with lightweight "drive:" file refs).
-  // Actual file bytes are fetched lazily, only when a file/image is shown (see resolveDrive / lazy image loader).
-  Object.keys(data).forEach(function(k){var val=data[k];try{val=typeof val==='string'?JSON.parse(val):val}catch(e){}cache[k]=val});
-  saveSnapshot();
-  return true;
-}
+   // Optionally refresh token silently before loading
+   try{if(API.token)await API.refreshToken()}catch(e){}
+
+   let res;
+   try{res=await API.getAll()}catch(e){res=null}
+   if(!res||!res.success){
+     if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();return false}
+     if(loadSnapshot()){setSyncStatus('offline');return true}
+     return false;
+   }
+   const data=res.data||{};
+   cache={};
+   // Fast startup: store values as-is (with lightweight "drive:" file refs).
+   // Actual file bytes are fetched lazily, only when a file/image is shown (see resolveDrive / lazy image loader).
+   Object.keys(data).forEach(function(k){var val=data[k];try{val=typeof val==='string'?JSON.parse(val):val}catch(e){}cache[k]=val});
+   saveSnapshot();
+   return true;
+ }
 function setSyncStatus(state){var el=document.getElementById('syncChip');if(!el){el=document.createElement('div');el.id='syncChip';el.className='sync-chip';document.body.appendChild(el)}var map={saving:{t:'Saving…',c:'saving',i:'fa-cloud-arrow-up'},saved:{t:'Saved',c:'saved',i:'fa-circle-check'},offline:{t:'Offline',c:'offline',i:'fa-triangle-exclamation'},error:{t:'Sync error',c:'offline',i:'fa-triangle-exclamation'}};var m=map[state]||map.saved;el.className='sync-chip show '+m.c;el.innerHTML='<i class="fas '+m.i+'"></i> '+m.t;clearTimeout(el._t);if(state==='saved'){el._t=setTimeout(function(){el.classList.remove('show')},1600)}}
 let members=[],currentMember=null,selectedPhoto=null,selectedFile=null,activeTab='profile',allAlerts=[];
 const esc=s=>{if(s==null)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML};
