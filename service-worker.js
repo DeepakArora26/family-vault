@@ -1,5 +1,6 @@
-// FamilyVault service worker — offline app shell + asset caching
+// FamilyVault service worker — offline app shell + asset + image caching
 const CACHE = 'familyvault-v20';
+const IMG_CACHE = 'familyvault-images-v20';
 const SHELL = [
   './',
   './index.html',
@@ -19,7 +20,10 @@ self.addEventListener('install', function (e) {
 self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
-      return Promise.all(keys.map(function (k) { if (k !== CACHE) return caches.delete(k); }));
+      return Promise.all(keys.map(function (k) {
+        // Clean old cache versions (keep current + images)
+        if (k !== CACHE && k !== IMG_CACHE) return caches.delete(k);
+      }));
     }).then(function () { return self.clients.claim(); })
   );
 });
@@ -51,7 +55,8 @@ self.addEventListener('fetch', function (e) {
         try {
           if (resp && (resp.ok || resp.type === 'opaque')) {
             var copy = resp.clone();
-            caches.open(CACHE).then(function (c) { c.put(req, copy); });
+            var cacheToUse = (req.url.indexOf('data:') === 0 || /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(url.pathname)) ? IMG_CACHE : CACHE;
+            caches.open(cacheToUse).then(function (c) { c.put(req, copy); });
           }
         } catch (err) {}
         return resp;

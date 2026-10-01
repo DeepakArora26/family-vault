@@ -397,6 +397,18 @@ const API={
   token: localStorage.getItem('fv_token')||'',
   setToken(t){this.token=t;localStorage.setItem('fv_token',t)},
   clearToken(){this.token='';localStorage.removeItem('fv_token')},
+  async refreshToken(){
+    // NEW: Auto-refresh token before expiry (every 6 days)
+    if(!this.token)return false;
+    try{
+      const resp=await this.call('refreshToken');
+      if(resp&&resp.success&&resp.token){
+        this.setToken(resp.token);
+        return true;
+      }
+    }catch(e){}
+    return false;
+  },
   async call(action,params,postBody){
     const url=new URL(APPS_SCRIPT_URL);
     url.searchParams.set('action',action);
@@ -448,6 +460,11 @@ async function slimUpload(v,name,meta){
   if(uploadedMap[v]) return uploadedMap[v];
   try{
     var mime=v.substring(5,v.indexOf(';'));var b64=v.split(',')[1];
+    // Compress image if it's > 500KB (quality 0.75, max 1200px)
+    if(mime.indexOf('image')===0&&b64.length>500*1024/1.33){
+      var compressed=await compressImage(v,1200,0.75);
+      if(compressed!==v){v=compressed;b64=v.split(',')[1];mime=v.substring(5,v.indexOf(';'))}
+    }
     var base=sanitizeName(name);var ext=_mimeExt[mime]||'';if(ext&&base.toLowerCase().slice(-ext.length)===ext)ext='';
     var payload={base64:b64,mimeType:mime,name:base+ext};
     if(meta&&meta.memberName)payload.memberName=meta.memberName;
@@ -1519,6 +1536,48 @@ function applyTheme(t){var mode=t||localStorage.getItem('fv_theme')||'system';va
 function cycleTheme(){var order=['system','dark','light'];var cur=localStorage.getItem('fv_theme')||'system';var next=order[(order.indexOf(cur)+1)%order.length];localStorage.setItem('fv_theme',next);applyTheme(next);toast('Theme: '+next,'info')}
 try{applyTheme();if(window.matchMedia){window.matchMedia('(prefers-color-scheme: light)').addEventListener('change',function(){if((localStorage.getItem('fv_theme')||'system')==='system')applyTheme('system')})}}catch(e){}
 try{purgeTrash()}catch(e){}
+// Service worker (offline PWA)
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){})})}
+// Online/offline status
+window.addEventListener('offline',function(){setSyncStatus('offline')});
+window.addEventListener('online',function(){var el=document.getElementById('syncChip');if(el)el.classList.remove('show')});
+// ===== AUTO TOKEN REFRESH (before 7-day expiry) =====
+// Check every 2 days if we should refresh the token (refresh at day 6, before day 7 expiry)
+(function(){if(!APPS_SCRIPT_URL||/^https:\/\/script\.google\.com\//.test(APPS_SCRIPT_URL)===false)return;
+setInterval(async function(){
+  if(localStorage.getItem('fv_auth')!=='1'||!API.token)return;
+  try{
+    var lastRefresh=parseInt(localStorage.getItem('fv_token_refresh')||'0');
+    var now=Date.now();
+    if(now-lastRefresh<5*24*60*60*1000)return; // Only refresh once every 5 days
+    var ok=await API.refreshToken();
+    if(ok){
+      localStorage.setItem('fv_token_refresh',String(now));
+      console.log('[FamilyVault] Token refreshed — session extended to 7 more days');
+    }
+  }catch(e){console.log('[FamilyVault] Token refresh failed (will retry in 2 days):',(e.message||''))}}
+, 2*24*60*60*1000); // Every 2 days
+})();
+// ===== IMAGE COMPRESSION BEFORE UPLOAD =====
+// Compress photos to max 1200px width, quality 0.75 JPEG
+function compressImage(dataUrl,maxWidth,quality){return new Promise(function(resolve){
+  try{
+    if(!dataUrl||typeof dataUrl!=='string'||!dataUrl.startsWith('data:'))return resolve(dataUrl);
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var w=img.width,h=img.height;
+        if(w<=maxWidth){return resolve(dataUrl)}; // Already small enough
+        var ratio=h/w;
+        var nw=maxWidth,nh=Math.round(maxWidth*ratio);
+        var c=document.createElement('canvas');
+        c.width=nw;c.height=nh;
+        c.getContext('2d').drawImage(img,0,0,nw,nh);
+        resolve(c.toDataURL('image/jpeg',quality))}
+      catch(e){resolve(dataUrl)}};
+    img.onerror=function(){resolve(dataUrl)};
+    img.src=dataUrl}
+  catch(e){resolve(dataUrl)}})}
 // Service worker (offline PWA)
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){})})}
 // Online/offline status
