@@ -568,9 +568,11 @@ let _persistChain=Promise.resolve();
 function snapStrip(v,k){if(Array.isArray(v))return v.map(function(x){return snapStrip(x,k)});if(v&&typeof v==='object'){var o={};for(var key in v)o[key]=snapStrip(v[key],key);return o}if(k==='thumb')return v;if(k==='dataUrl'&&typeof v==='string'&&v.indexOf('drive:')===0)return v;if(isDataUrl(v))return '';return v}
 function saveSnapshot(){try{var s={};Object.keys(cache).forEach(function(k){s[k]=snapStrip(cache[k])});localStorage.setItem('fv_snapshot',JSON.stringify(s))}catch(e){}}
 function loadSnapshot(){try{var s=localStorage.getItem('fv_snapshot');if(!s)return false;var d=JSON.parse(s);cache={};Object.keys(d).forEach(function(k){cache[k]=d[k]});return true}catch(e){return false}}
+function isBrowserOffline(){return typeof navigator!=='undefined'&&navigator.onLine===false}
+function syncStateForFailure(){return isBrowserOffline()?'offline':'error'}
 function persistKey(k,v){
   _persistChain=_persistChain.then(async()=>{
-    if(typeof navigator!=='undefined'&&navigator.onLine===false){setSyncStatus('offline');return}
+    if(isBrowserOffline()){setSyncStatus('offline');return}
     setSyncStatus('saving');
     try{
       const slimmed=await slim(v,{storeKey:k});
@@ -578,7 +580,7 @@ function persistKey(k,v){
       if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();localStorage.removeItem('fv_auth');toast('Session expired. Please log in again.','error');showPage('loginPage')}
       else if(res&&!res.success){setSyncStatus('error');toast('Save failed. Check your connection.','error')}
       else{setSyncStatus('saved');saveSnapshot()}
-    }catch(e){setSyncStatus('offline')}
+    }catch(e){setSyncStatus(syncStateForFailure())}
   });
   return _persistChain;
 }
@@ -590,7 +592,7 @@ async function bootstrap(){
    try{res=await API.getAll()}catch(e){res=null}
    if(!res||!res.success){
      if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();return false}
-     if(loadSnapshot()){setSyncStatus('offline');return true}
+     if(loadSnapshot()){setSyncStatus(syncStateForFailure());return true}
      return false;
    }
    const data=res.data||{};
@@ -1656,9 +1658,7 @@ function compressImage(dataUrl,maxWidth,quality){return new Promise(function(res
   catch(e){resolve(dataUrl)}})}
 // Service worker (offline PWA)
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){})})}
-// Online/offline status
-window.addEventListener('offline',function(){setSyncStatus('offline')});
-window.addEventListener('online',function(){var el=document.getElementById('syncChip');if(el)el.classList.remove('show')});
+// Online/offline status listeners already registered above.
 // Home-screen shortcuts (?a=add|search|contacts) — run after content is ready
 function handleShortcut(){try{var a=new URLSearchParams(location.search).get('a');if(!a)return;if(localStorage.getItem('fv_auth')!=='1')return;setTimeout(function(){if(a==='add')openMemberModal();else if(a==='search')openGlobalSearch();else if(a==='contacts')openContacts()},400);history.replaceState({},'',location.pathname)}catch(e){}}
 handleShortcut();
