@@ -391,7 +391,7 @@ function _lsGet(k,d){try{return JSON.parse(localStorage.getItem('fv_'+k))||d}cat
 function _lsSet(k,v){try{localStorage.setItem('fv_'+k,JSON.stringify(v))}catch(e){}}
 const LS={
   get:(k,d)=>{ if(LOCAL_MODE) return _lsGet(k,d); return (k in cache)?cache[k]:d; },
-  set:(k,v)=>{ if(LOCAL_MODE){ _lsSet(k,v); return Promise.resolve(v); } cache[k]=v; return persistKey(k,v); }
+  set:(k,v)=>{ if(LOCAL_MODE){ _lsSet(k,v); return Promise.resolve(v); } cache[k]=v; markPendingKey(k); saveSnapshot(); return persistKey(k,v); }
 };
 const API={
   token: localStorage.getItem('fv_token')||'',
@@ -567,8 +567,14 @@ function prepDriveImg(img){var src=img.getAttribute('src')||'';if(src.indexOf('d
 if(!LOCAL_MODE&&'MutationObserver' in window){new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){var an=muts[i].addedNodes;for(var j=0;j<an.length;j++){var n=an[j];if(!n||n.nodeType!==1)continue;if(n.tagName==='IMG')prepDriveImg(n);if(n.querySelectorAll){var gs=n.querySelectorAll('img');for(var q=0;q<gs.length;q++)prepDriveImg(gs[q])}}}}).observe(document.documentElement,{childList:true,subtree:true})}
 let _persistChain=Promise.resolve(),_pendingWrites=0;
 function snapStrip(v,k){if(Array.isArray(v))return v.map(function(x){return snapStrip(x,k)});if(v&&typeof v==='object'){var o={};for(var key in v)o[key]=snapStrip(v[key],key);return o}if(k==='thumb')return v;if(k==='dataUrl'&&typeof v==='string'&&v.indexOf('drive:')===0)return v;if(isDataUrl(v))return '';return v}
+function snapshotData(){try{var s=localStorage.getItem('fv_snapshot');return s?JSON.parse(s):null}catch(e){return null}}
 function saveSnapshot(){try{var s={};Object.keys(cache).forEach(function(k){s[k]=snapStrip(cache[k])});localStorage.setItem('fv_snapshot',JSON.stringify(s))}catch(e){}}
-function loadSnapshot(){try{var s=localStorage.getItem('fv_snapshot');if(!s)return false;var d=JSON.parse(s);cache={};Object.keys(d).forEach(function(k){cache[k]=d[k]});return true}catch(e){return false}}
+function loadSnapshot(){try{var d=snapshotData();if(!d)return false;cache={};Object.keys(d).forEach(function(k){cache[k]=d[k]});return true}catch(e){return false}}
+function getPendingKeyMap(){try{var raw=localStorage.getItem('fv_pending_keys');var data=raw?JSON.parse(raw):{};return(data&&typeof data==='object')?data:{}}catch(e){return {}}}
+function setPendingKeyMap(map){try{if(map&&Object.keys(map).length)localStorage.setItem('fv_pending_keys',JSON.stringify(map));else localStorage.removeItem('fv_pending_keys')}catch(e){}}
+function markPendingKey(k){var map=getPendingKeyMap();map[k]=Date.now();setPendingKeyMap(map)}
+function clearPendingKey(k){var map=getPendingKeyMap();if(k in map){delete map[k];setPendingKeyMap(map)}}
+function applyPendingSnapshot(){var map=getPendingKeyMap(),snap=snapshotData(),keys=Object.keys(map);if(!snap||!keys.length)return keys;keys.forEach(function(k){if(k in snap)cache[k]=snap[k]});return keys}
 function isBrowserOffline(){return typeof navigator!=='undefined'&&navigator.onLine===false}
 function syncStateForFailure(){return isBrowserOffline()?'offline':'error'}
 function persistKey(k,v){
@@ -581,7 +587,7 @@ function persistKey(k,v){
       const res=await API.setKey(k,JSON.stringify(slimmed));
       if(res&&res.error&&/unauthor/i.test(res.error)){API.clearToken();localStorage.removeItem('fv_auth');toast('Session expired. Please log in again.','error');showPage('loginPage')}
       else if(res&&!res.success){setSyncStatus('error');toast('Save failed. Check your connection.','error')}
-      else{setSyncStatus('saved');saveSnapshot()}
+      else{clearPendingKey(k);setSyncStatus('saved');saveSnapshot()}
     }catch(e){setSyncStatus(syncStateForFailure())}
   }).finally(function(){_pendingWrites=Math.max(0,_pendingWrites-1)});
   return _persistChain;
@@ -602,7 +608,9 @@ async function bootstrap(){
    // Fast startup: store values as-is (with lightweight "drive:" file refs).
    // Actual file bytes are fetched lazily, only when a file/image is shown (see resolveDrive / lazy image loader).
    Object.keys(data).forEach(function(k){var val=data[k];try{val=typeof val==='string'?JSON.parse(val):val}catch(e){}cache[k]=val});
+   var pendingKeys=applyPendingSnapshot();
    saveSnapshot();
+    if(pendingKeys.length){setSyncStatus(isBrowserOffline()?'offline':'saving');pendingKeys.forEach(function(k){persistKey(k,cache[k])})}
    return true;
  }
 function setSyncStatus(state){var el=document.getElementById('syncChip');if(!el){el=document.createElement('div');el.id='syncChip';el.className='sync-chip';document.body.appendChild(el)}var map={saving:{t:'Saving…',c:'saving',i:'fa-cloud-arrow-up'},saved:{t:'Saved',c:'saved',i:'fa-circle-check'},offline:{t:'Offline',c:'offline',i:'fa-triangle-exclamation'},error:{t:'Sync error',c:'offline',i:'fa-triangle-exclamation'}};var m=map[state]||map.saved;el.className='sync-chip show '+m.c;el.innerHTML='<i class="fas '+m.i+'"></i> '+m.t;clearTimeout(el._t);if(state==='saved'){el._t=setTimeout(function(){el.classList.remove('show')},1600)}}
