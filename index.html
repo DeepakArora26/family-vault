@@ -98,6 +98,24 @@ body.light .bg-animation{background:radial-gradient(58% 46% at 12% -4%,rgba(124,
 .reading-log{margin-top:14px;border-top:1px solid var(--glass-border);padding-top:10px}.reading-log-head{font-size:.68rem;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin-bottom:6px}.reading-row{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:8px;transition:var(--transition)}.reading-row:hover{background:rgba(255,255,255,.04)}.reading-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}.reading-info{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.reading-val{font-weight:600;font-size:.85rem}.reading-date{font-size:.72rem;color:var(--text-dim)}.reading-notes{font-size:.72rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.reading-acts{display:flex;gap:4px;flex-shrink:0}.btn-icon-sm{width:28px;height:28px;border:1px solid var(--glass-border);border-radius:7px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:.72rem;display:flex;align-items:center;justify-content:center;transition:var(--transition)}.btn-icon-sm:hover{border-color:var(--accent);color:var(--text)}.btn-icon-sm.danger:hover{border-color:var(--danger);color:var(--danger)}
 .metric-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
 .metric-mini{padding:14px;border-radius:var(--radius-sm);background:rgba(255,255,255,.03);border:1px solid var(--glass-border);text-align:center;transition:var(--transition)}.metric-mini:hover{border-color:rgba(108,99,255,.3)}
+.doc-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px}
+.doc-filter button{padding:6px 12px;border:1px solid var(--glass-border);background:transparent;color:var(--text-dim);border-radius:6px;font-size:.75rem;cursor:pointer;transition:var(--transition);white-space:nowrap}
+.doc-filter button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.doc-filter button:hover:not(.active){border-color:var(--accent)}
+.doc-sort{padding:6px 10px;border:1px solid var(--glass-border);background:rgba(255,255,255,.03);color:var(--text);border-radius:6px;font-size:.75rem;cursor:pointer}
+.tab-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;background:var(--danger);border-radius:50%}
+.skel{background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.09),rgba(255,255,255,.04));background-size:200% 100%;animation:tabsh 1.2s infinite}
+@keyframes tabsh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skel-card{height:80px;border-radius:12px}
+.health-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.health-chip{padding:12px;background:rgba(255,255,255,.04);border:1px solid var(--glass-border);border-radius:8px;cursor:pointer;transition:var(--transition);display:flex;align-items:center;gap:8px}
+.health-chip:hover{border-color:var(--accent)}
+.health-chip.good{border-left:3px solid var(--accent2);background:rgba(0,212,170,.06)}
+.health-chip.bad{border-left:3px solid var(--danger);background:rgba(255,71,87,.06)}
+.health-chip.warn{border-left:3px solid var(--warning);background:rgba(255,165,2,.06)}
+.tag-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(255,255,255,.08);border-radius:12px;font-size:.7rem;color:var(--text-dim)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:768px){.two-col{grid-template-columns:1fr}}
 .metric-mini .metric-val{font-size:1.4rem;font-weight:700;line-height:1}.metric-mini .metric-lbl{font-size:.68rem;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.3px}.metric-mini .metric-date{font-size:.62rem;color:var(--text-muted);margin-top:2px}
 .metric-mini .trend{font-size:.7rem;margin-top:4px;font-weight:600}.trend.up{color:var(--danger)}.trend.down{color:var(--accent2)}.trend.stable{color:var(--text-dim)}
 .metric-mini.normal .metric-val{color:var(--accent2)}.metric-mini.high .metric-val{color:var(--danger)}.metric-mini.low-val .metric-val{color:var(--warning)}
@@ -819,6 +837,226 @@ function disableBiometric(){localStorage.removeItem('fv_bio');modal('confirmModa
 async function biometricUnlock(silent){if(!bioEnabled()||!window.PublicKeyCredential)return;try{await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:bufFromB64(localStorage.getItem('fv_bio')),transports:['internal']}],userVerification:'required',timeout:60000}});unlockApp()}catch(e){if(!silent)toast('Biometric failed — use PIN','error')}}
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'){_hiddenAt=Date.now()}else if(getPinHash()&&!_appLocked&&localStorage.getItem('fv_auth')==='1'&&(Date.now()-_hiddenAt>15000)){lockApp()}});
 
+// ============================================================
+// FEATURE: INSURANCE & BILLING TRACKER
+// ============================================================
+
+// Get policies for current member
+function getInsurancePolicies(){return LS.get('insurance_'+currentMember.id,[])}
+function setInsurancePolicies(v){LS.set('insurance_'+currentMember.id,v)}
+
+// Get bills for current member
+function getInsuranceBills(){return LS.get('bills_'+currentMember.id,[])}
+function setInsuranceBills(v){LS.set('bills_'+currentMember.id,v)}
+
+// Get claims for current member
+function getInsuranceClaims(){return LS.get('claims_'+currentMember.id,[])}
+function setInsuranceClaims(v){LS.set('claims_'+currentMember.id,v)}
+
+function renderInsurance(c){
+  var policies=getInsurancePolicies();
+  var bills=getInsuranceBills();
+  var claims=getInsuranceClaims();
+  var thisMonth=new Date().toISOString().slice(0,7);
+  var monthBills=bills.filter(function(b){return(b.date||'').slice(0,7)===thisMonth});
+  var monthTotal=monthBills.reduce(function(s,b){return s+(b.amount||0)},0);
+  var claimsAwait=claims.filter(function(cl){return cl.status==='submitted'||cl.status==='pending'});
+
+  var policyHTML='<div class="section-header"><h2><i class="fas fa-file-shield"></i> Insurance Policies</h2><button class="btn btn-primary btn-sm" onclick="openPolicyModal()"><i class="fas fa-plus"></i> Add Policy</button></div>';
+  if(policies.length){
+    policyHTML+=policies.map(function(p){
+      var daysLeft=p.expiryDate?Math.ceil((new Date(p.expiryDate+'T00:00:00')-new Date())/86400000):null;
+      var expireClass=daysLeft!==null?(daysLeft<=30?'exp-soon':daysLeft<=0?'expired':''):'';
+      var expText=daysLeft!==null?(daysLeft<=0?'Expired':daysLeft+' days left'):'No expiry';
+      return'<div class="record-card '+(daysLeft!==null&&daysLeft<=30?'border-left:3px solid var(--warning)':'')+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><h4 style="font-size:.92rem;font-weight:600"><i class="fas fa-shield" style="color:var(--accent2);margin-right:6px"></i>'+esc(p.policyName)+'</h4><div style="font-size:.75rem;color:var(--text-dim);margin-top:2px">'+esc(p.company)+' · Policy #'+esc(p.policyNumber)+'</div></div><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="openPolicyModal(\''+p.id+'\')" title="Edit"><i class="fas fa-pen"></i></button><button class="btn btn-danger btn-sm" onclick="deletePolicy(\''+p.id+'\')" title="Delete"><i class="fas fa-trash-can"></i></button></div></div><div class="record-body"><div><div class="rl">Type</div>'+esc(p.type||'\u2014')+'</div><div><div class="rl">Premium</div>'+esc(p.premium?'₹'+p.premium+'/'+p.premiumFreq:'—')+'</div><div><div class="rl">Coverage</div>'+esc(p.coverage?'₹'+p.coverage.toLocaleString('en-IN'):'—')+'</div><div><div class="rl">Expiry</div><span style="'+(daysLeft!==null&&daysLeft<=30?'color:var(--warning);font-weight:600':'')+'">'+esc(p.expiryDate?fmtDate(p.expiryDate)+' ('+expText+')':'—')+'</span></div></div>'+(p.notes?'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--glass-border);font-size:.82rem;color:var(--text-dim)"><i class="fas fa-note-sticky" style="margin-right:4px"></i>'+esc(p.notes)+'</div>':'')+'</div>'
+    }).join('');
+  }else{
+    policyHTML+='<div class="empty-state"><i class="fas fa-file-shield"></i><p>No insurance policies added.</p><button class="btn btn-primary" style="margin-top:12px" onclick="openPolicyModal()"><i class="fas fa-plus"></i> Add a policy</button></div>';
+  }
+
+  var billHTML='<div class="section-header" style="margin-top:24px"><h2><i class="fas fa-receipt"></i> Medical Bills & Expenses</h2><button class="btn btn-primary btn-sm" onclick="openBillModal()"><i class="fas fa-plus"></i> Add Bill</button><button class="btn btn-secondary btn-sm" onclick="showBillAnalytics()" title="Analytics"><i class="fas fa-chart-column"></i></button></div>';
+  billHTML+='<div style="background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.25);border-radius:12px;padding:14px 18px;margin-bottom:14px"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:.75rem;text-transform:uppercase;color:var(--text-dim)">This month</span><span style="font-size:1.4rem;font-weight:700;color:var(--accent)">₹'+monthTotal.toLocaleString('en-IN')+'</span></div><div style="font-size:.72rem;color:var(--text-dim);margin-top:4px">'+monthBills.length+' bill'+(monthBills.length!==1?'s':'')+' tracked</div></div>';
+  if(bills.length){
+    billHTML+='<div style="max-height:320px;overflow-y:auto">'+bills.slice(0,8).map(function(b){
+      return'<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--glass-border);border-radius:8px;margin-bottom:8px"><div style="flex:1;min-width:0"><div style="font-size:.85rem;font-weight:500">'+esc(b.description)+'</div><div style="font-size:.72rem;color:var(--text-dim);margin-top:2px">'+fmtDate(b.date)+(b.policyId?'':' · Out of pocket')+'</div></div><div style="text-align:right"><div style="font-weight:600;color:var(--accent)">₹'+b.amount.toLocaleString('en-IN')+'</div><div style="font-size:.7rem;color:var(--text-dim)">'+(b.reimbursed?'✓ Reimbursed':'Pending')+'</div></div><button style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px" onclick="deleteBill(\''+b.id+'\')"><i class="fas fa-xmark" style="font-size:.7rem"></i></button></div>'
+    }).join('')+'</div>';
+  }else{
+    billHTML+='<div class="empty-state"><i class="fas fa-receipt"></i><p>No bills tracked.</p><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openBillModal()"><i class="fas fa-plus"></i> Add a bill</button></div>';
+  }
+
+  var claimHTML='<div class="section-header" style="margin-top:24px"><h2><i class="fas fa-file-check"></i> Insurance Claims</h2><button class="btn btn-primary btn-sm" onclick="openClaimModal()"><i class="fas fa-plus"></i> New Claim</button></div>';
+  if(claims.length){
+    claimHTML+=claims.map(function(cl){
+      var statusColor=cl.status==='approved'?'var(--accent2)':cl.status==='rejected'?'var(--danger)':cl.status==='submitted'?'var(--warning)':'var(--text-dim)';
+      return'<div class="record-card"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px"><div><h4 style="font-size:.92rem;font-weight:600"><i class="fas fa-file-check" style="color:'+statusColor+';margin-right:6px"></i>Claim '+esc(cl.claimNumber)+'</h4><div style="font-size:.75rem;color:var(--text-dim);margin-top:2px">'+esc(cl.policyId?getInsurancePolicies().find(function(p){return p.id===cl.policyId})?.policyName||'Policy':'General claim')+'</div></div><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="openClaimModal(\''+cl.id+'\')" title="Edit"><i class="fas fa-pen"></i></button><button class="btn btn-danger btn-sm" onclick="deleteClaim(\''+cl.id+'\')" title="Delete"><i class="fas fa-trash-can"></i></button></div></div><div class="record-body"><div><div class="rl">Amount</div>₹'+cl.amount.toLocaleString('en-IN')+'</div><div><div class="rl">Status</div><span style="color:'+statusColor+';font-weight:600;text-transform:capitalize">'+cl.status+'</span></div><div><div class="rl">Filed</div>'+fmtDate(cl.dateSubmitted)+'</div><div><div class="rl">Expected Approval</div>'+(cl.expectedApproval?fmtDate(cl.expectedApproval):'—')+'</div></div>'+(cl.notes?'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--glass-border);font-size:.82rem;color:var(--text-dim)">'+esc(cl.notes)+'</div>':'')+'</div>'
+    }).join('');
+  }else{
+    claimHTML+='<div class="empty-state"><i class="fas fa-file-check"></i><p>No claims filed.</p><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openClaimModal()"><i class="fas fa-plus"></i> File a claim</button></div>';
+  }
+
+  c.innerHTML=policyHTML+billHTML+claimHTML;
+}
+
+function openPolicyModal(editId){
+  var p=editId?getInsurancePolicies().find(function(x){return x.id===editId}):null;
+  var today=new Date().toISOString().split('T')[0];
+  document.getElementById('confirmModalInner').innerHTML='<h2 style="justify-content:flex-start"><i class="fas fa-file-shield" style="color:var(--accent2)"></i> '+(p?'Edit':'Add')+' Insurance Policy</h2><div style="text-align:left"><div class="input-group"><label>Policy Name *</label><input id="pol_name" value="'+esc(p?p.policyName:'')+'" placeholder="e.g. Health Insurance"></div><div class="form-row"><div class="input-group"><label>Insurance Company *</label><input id="pol_company" value="'+esc(p?p.company:'')+'" placeholder="e.g. HDFC ERGO"></div><div class="input-group"><label>Policy Number *</label><input id="pol_number" value="'+esc(p?p.policyNumber:'')+'" placeholder="ABC123456"></div></div><div class="form-row"><div class="input-group"><label>Type</label><select id="pol_type"><option value="">Select…</option><option value="Health"'+(p&&p.type==='Health'?' selected':'')+'>Health Insurance</option><option value="Medical"'+(p&&p.type==='Medical'?' selected':'')+'>Medical Insurance</option><option value="Critical Illness"'+(p&&p.type==='Critical Illness'?' selected':'')+'>Critical Illness</option><option value="Accident"'+(p&&p.type==='Accident'?' selected':'')+'>Accident Insurance</option><option value="Other"'+(p&&p.type==='Other'?' selected':'')+'>Other</option></select></div><div class="input-group"><label>Coverage Amount (₹)</label><input type="number" id="pol_coverage" value="'+(p?p.coverage:'')+'" placeholder="e.g. 500000"></div></div><div class="form-row"><div class="input-group"><label>Premium Amount (₹)</label><input type="number" id="pol_premium" value="'+(p?p.premium:'')+'" placeholder="e.g. 5000"></div><div class="input-group"><label>Premium Frequency</label><select id="pol_freq"><option value="yearly"'+((!p||p.premiumFreq==='yearly')?' selected':'')+'>Yearly</option><option value="half-yearly"'+(p&&p.premiumFreq==='half-yearly'?' selected':'')+'>Half-yearly</option><option value="quarterly"'+(p&&p.premiumFreq==='quarterly'?' selected':'')+'>Quarterly</option><option value="monthly"'+(p&&p.premiumFreq==='monthly'?' selected':'')+'>Monthly</option></select></div></div><div class="input-group"><label>Expiry Date</label><input type="date" id="pol_expiry" value="'+(p?p.expiryDate||'':(new Date(Date.now()+365*24*60*60*1000).toISOString().split('T')[0]))+'"></div><div class="input-group"><label>Notes</label><textarea id="pol_notes" style="min-height:60px">'+esc(p?p.notes:'')+'</textarea></div></div><div class="modal-actions"><button class="btn btn-secondary" onclick="modal(\'confirmModal\',false)">Cancel</button><button class="btn btn-primary" onclick="savePolicy(\''+esc(editId||'')+'\')"><i class="fas fa-check"></i> Save</button></div>';
+  document.getElementById('confirmModal').querySelector('.modal').style.maxWidth='500px';
+  modal('confirmModal',true);
+}
+
+function savePolicy(editId){
+  var name=document.getElementById('pol_name').value.trim();
+  var company=document.getElementById('pol_company').value.trim();
+  var number=document.getElementById('pol_number').value.trim();
+  if(!name||!company||!number){toast('Fill required fields','error');return}
+  var policies=getInsurancePolicies();
+  var data={
+    policyName:name,
+    company:company,
+    policyNumber:number,
+    type:document.getElementById('pol_type').value,
+    coverage:Number(document.getElementById('pol_coverage').value)||0,
+    premium:Number(document.getElementById('pol_premium').value)||0,
+    premiumFreq:document.getElementById('pol_freq').value||'yearly',
+    expiryDate:document.getElementById('pol_expiry').value,
+    notes:document.getElementById('pol_notes').value.trim()
+  };
+  if(editId){
+    policies=policies.map(function(x){return x.id===editId?Object.assign({},x,data):x});
+  }else{
+    data.id='pol_'+Date.now();
+    policies.push(data);
+  }
+  setInsurancePolicies(policies);
+  modal('confirmModal',false);
+  renderTab();
+  toast(editId?'Policy updated!':'Policy added!','success');
+}
+
+function deletePolicy(id){
+  var arr=getInsurancePolicies();
+  var item=arr.find(function(p){return p.id===id});
+  if(!item)return;
+  setInsurancePolicies(arr.filter(function(p){return p.id!==id}));
+  renderTab();
+  toast('Policy deleted','success');
+}
+
+function openBillModal(editId){
+  var b=editId?getInsuranceBills().find(function(x){return x.id===editId}):null;
+  var today=new Date().toISOString().split('T')[0];
+  var policies=getInsurancePolicies();
+  var policyOpts='<option value="">Out of Pocket</option>'+policies.map(function(p){return'<option value="'+p.id+'"'+(b&&b.policyId===p.id?' selected':'')+'>'+esc(p.policyName)+'</option>'}).join('');
+  document.getElementById('confirmModalInner').innerHTML='<h2 style="justify-content:flex-start"><i class="fas fa-receipt" style="color:var(--accent)"></i> '+(b?'Edit':'Add')+' Medical Bill</h2><div style="text-align:left"><div class="input-group"><label>Description *</label><input id="bill_desc" value="'+esc(b?b.description:'')+'" placeholder="e.g. Doctor visit, Pharmacy, Lab test"></div><div class="form-row"><div class="input-group"><label>Amount (₹) *</label><input type="number" id="bill_amt" inputmode="decimal" value="'+(b?b.amount:'')+'" placeholder="1000"></div><div class="input-group"><label>Date *</label><input type="date" id="bill_date" value="'+(b?b.date:today)+'"></div></div><div class="input-group"><label>Linked Policy</label><select id="bill_policy">'+policyOpts+'</select></div><div class="input-group"><label><input type="checkbox" id="bill_reimb" '+(b&&b.reimbursed?'checked':'')+' style="width:18px;height:18px;margin-right:8px"> Amount reimbursed by insurance</label></div></div><div class="modal-actions"><button class="btn btn-secondary" onclick="modal(\'confirmModal\',false)">Cancel</button><button class="btn btn-primary" onclick="saveBill(\''+esc(editId||'')+'\')"><i class="fas fa-check"></i> Save</button></div>';
+  document.getElementById('confirmModal').querySelector('.modal').style.maxWidth='480px';
+  modal('confirmModal',true);
+}
+
+function saveBill(editId){
+  var desc=document.getElementById('bill_desc').value.trim();
+  var amt=Number(document.getElementById('bill_amt').value);
+  if(!desc||!amt){toast('Fill required fields','error');return}
+  var bills=getInsuranceBills();
+  var data={
+    description:desc,
+    amount:amt,
+    date:document.getElementById('bill_date').value,
+    policyId:document.getElementById('bill_policy').value||'',
+    reimbursed:document.getElementById('bill_reimb').checked
+  };
+  if(editId){
+    bills=bills.map(function(x){return x.id===editId?Object.assign({},x,data):x});
+  }else{
+    data.id='bill_'+Date.now();
+    bills.push(data);
+  }
+  setInsuranceBills(bills);
+  modal('confirmModal',false);
+  renderTab();
+  toast(editId?'Bill updated!':'Bill added!','success');
+}
+
+function deleteBill(id){
+  var arr=getInsuranceBills();
+  var item=arr.find(function(b){return b.id===id});
+  if(!item)return;
+  setInsuranceBills(arr.filter(function(b){return b.id!==id}));
+  renderTab();
+  toast('Bill deleted','success');
+}
+
+function openClaimModal(editId){
+  var cl=editId?getInsuranceClaims().find(function(x){return x.id===editId}):null;
+  var today=new Date().toISOString().split('T')[0];
+  var policies=getInsurancePolicies();
+  var policyOpts='<option value="">General Claim</option>'+policies.map(function(p){return'<option value="'+p.id+'"'+(cl&&cl.policyId===p.id?' selected':'')+'>'+esc(p.policyName)+'</option>'}).join('');
+  document.getElementById('confirmModalInner').innerHTML='<h2 style="justify-content:flex-start"><i class="fas fa-file-check" style="color:var(--accent2)"></i> '+(cl?'Edit':'File')+' Insurance Claim</h2><div style="text-align:left"><div class="input-group"><label>Claim Number</label><input id="claim_num" value="'+esc(cl?cl.claimNumber:'')+'" placeholder="e.g. CLM20260915" disabled></div><div class="form-row"><div class="input-group"><label>Policy</label><select id="claim_policy">'+policyOpts+'</select></div><div class="input-group"><label>Claim Amount (₹) *</label><input type="number" id="claim_amt" inputmode="decimal" value="'+(cl?cl.amount:'')+'" placeholder="10000"></div></div><div class="form-row"><div class="input-group"><label>Date Submitted *</label><input type="date" id="claim_date" value="'+(cl?cl.dateSubmitted:today)+'"></div><div class="input-group"><label>Status</label><select id="claim_status"><option value="pending"'+((!cl||cl.status==='pending')?' selected':'')+'>Pending</option><option value="submitted"'+(cl&&cl.status==='submitted'?' selected':'')+'>Submitted</option><option value="approved"'+(cl&&cl.status==='approved'?' selected':'')+'>Approved</option><option value="rejected"'+(cl&&cl.status==='rejected'?' selected':'')+'>Rejected</option></select></div></div><div class="input-group"><label>Expected Approval Date</label><input type="date" id="claim_approval" value="'+(cl?cl.expectedApproval||'':(new Date(Date.now()+30*24*60*60*1000).toISOString().split('T')[0]))+'"></div><div class="input-group"><label>Notes</label><textarea id="claim_notes" style="min-height:60px">'+esc(cl?cl.notes:'')+'</textarea></div></div><div class="modal-actions"><button class="btn btn-secondary" onclick="modal(\'confirmModal\',false)">Cancel</button><button class="btn btn-primary" onclick="saveClaim(\''+esc(editId||'')+'\')"><i class="fas fa-check"></i> Save</button></div>';
+  document.getElementById('confirmModal').querySelector('.modal').style.maxWidth='480px';
+  modal('confirmModal',true);
+}
+
+function saveClaim(editId){
+  var amt=Number(document.getElementById('claim_amt').value);
+  var date=document.getElementById('claim_date').value;
+  if(!amt||!date){toast('Fill required fields','error');return}
+  var claims=getInsuranceClaims();
+  var data={
+    claimNumber:editId?document.getElementById('claim_num').value:('CLM'+new Date().toISOString().slice(0,10).replace(/-/g,'')),
+    policyId:document.getElementById('claim_policy').value||'',
+    amount:amt,
+    dateSubmitted:date,
+    status:document.getElementById('claim_status').value,
+    expectedApproval:document.getElementById('claim_approval').value||'',
+    notes:document.getElementById('claim_notes').value.trim()
+  };
+  if(editId){
+    claims=claims.map(function(x){return x.id===editId?Object.assign({},x,data):x});
+  }else{
+    data.id='claim_'+Date.now();
+    claims.push(data);
+  }
+  setInsuranceClaims(claims);
+  modal('confirmModal',false);
+  renderTab();
+  toast(editId?'Claim updated!':'Claim filed!','success');
+}
+
+function deleteClaim(id){
+  var arr=getInsuranceClaims();
+  var item=arr.find(function(c){return c.id===id});
+  if(!item)return;
+  setInsuranceClaims(arr.filter(function(c){return c.id!==id}));
+  renderTab();
+  toast('Claim deleted','success');
+}
+
+function showBillAnalytics(){
+  var bills=getInsuranceBills();
+  if(!bills.length){toast('No bills tracked','info');return}
+  var byMonth={},byCategory={},total=0;
+  bills.forEach(function(b){
+    var mo=(b.date||'').slice(0,7)||'—';
+    byMonth[mo]=(byMonth[mo]||0)+(b.amount||0);
+    var cat=b.policyId?'Covered':'Out of Pocket';
+    byCategory[cat]=(byCategory[cat]||0)+(b.amount||0);
+    total+=b.amount||0;
+  });
+  var months=Object.keys(byMonth).sort().slice(-6);
+  var maxM=Math.max.apply(null,months.map(function(k){return byMonth[k]}))||1;
+  var bars=months.map(function(k){
+    var h=Math.round(byMonth[k]/maxM*88)+8;
+    return'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="font-size:.58rem;color:var(--text-dim)">₹'+(byMonth[k]>=1000?Math.round(byMonth[k]/1000)+'k':byMonth[k])+'</div><div style="width:66%;height:'+h+'px;background:linear-gradient(180deg,var(--accent),var(--accent2));border-radius:5px"></div><div style="font-size:.58rem;color:var(--text-muted)">'+k.slice(5)+'</div></div>'
+  }).join('');
+  var catRows=Object.keys(byCategory).sort().map(function(cat){
+    var pct=total?Math.round(byCategory[cat]/total*100):0;
+    return'<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:.8rem"><span>'+esc(cat)+'</span><span style="font-weight:600">₹'+byCategory[cat].toLocaleString('en-IN')+' · '+pct+'%</span></div><div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(cat==='Covered'?'var(--accent2)':'var(--warning)')+'"></div></div></div>'
+  }).join('');
+  document.getElementById('confirmModalInner').innerHTML='<h2 style="justify-content:flex-start"><i class="fas fa-chart-column" style="color:var(--accent)"></i> Bill Analytics</h2><div style="text-align:left"><div style="font-size:.8rem;color:var(--text-dim);margin-bottom:6px">Total tracked: <b style="color:var(--text)">₹'+total.toLocaleString('en-IN')+'</b></div><div style="display:flex;align-items:flex-end;gap:6px;height:128px;padding:10px;background:rgba(255,255,255,.03);border-radius:10px;margin-bottom:14px">'+bars+'</div><div style="font-size:.72rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Coverage breakdown</div>'+catRows+'</div><div class="modal-actions" style="justify-content:center"><button class="btn btn-secondary" onclick="modal(\'confirmModal\',false)">Close</button></div>';
+  document.getElementById('confirmModal').querySelector('.modal').style.maxWidth='480px';
+  modal('confirmModal',true);
+}
+
 function renderMembers(list){var g=document.getElementById('membersGrid');if(!list.length){g.innerHTML='<div class="empty-state glass" style="grid-column:1/-1"><i class="fas fa-users-slash"></i><p>No members yet.</p><button class="btn btn-primary" style="margin-top:14px" onclick="openMemberModal()"><i class="fas fa-user-plus"></i> Add your first member</button></div>';return}g.innerHTML=list.map(function(m){var age=m.dob?calcAge(m.dob):'';var meds=LS.get('meds_'+m.id,[]);var activeMeds=meds.filter(function(x){return x.active!==false}).length;var low=meds.filter(function(x){return x.active!==false&&daysLeft(x)<=5}).length;var docsN=LS.get('docs_'+m.id,[]).filter(function(d){return!d.refId}).length;var callNo=m.phone||m.emergencyContact;return'<div class="member-card glass" onclick="viewMember(\''+m.id+'\')"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+avatar(m,'member-avatar')+'<div style="flex:1;min-width:0"><h3 style="font-size:1rem;font-weight:600">'+esc(m.name)+'</h3><span style="font-size:.78rem;color:var(--text-dim)">'+[m.relation,age?age+' yrs':'',m.gender].filter(Boolean).join(' &middot; ')+'</span></div>'+(callNo?'<a href="tel:'+esc(callNo)+'" onclick="event.stopPropagation()" class="btn-icon" style="background:rgba(0,212,170,.15);color:var(--accent2);border-color:transparent;flex-shrink:0" title="Call"><i class="fas fa-phone"></i></a>':'')+'</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+(m.bloodGroup?'<span class="member-tag blood"><i class="fas fa-droplet"></i> '+esc(m.bloodGroup)+'</span>':'')+(activeMeds?'<span class="member-tag"><i class="fas fa-pills"></i> '+activeMeds+' med'+(activeMeds>1?'s':'')+'</span>':'')+(docsN?'<span class="member-tag"><i class="fas fa-file-lines"></i> '+docsN+' doc'+(docsN>1?'s':'')+'</span>':'')+(low?'<span class="member-tag alert"><i class="fas fa-triangle-exclamation"></i> '+low+' low</span>':'')+'</div></div>'}).join('')}
 function filterMembers(){var q=document.getElementById('searchInput').value.toLowerCase();renderMembers(members.filter(function(m){return[m.name,m.relation,m.phone,m.bloodGroup].some(function(v){return(v||'').toLowerCase().indexOf(q)>=0})}))}
 function updateStats(){document.getElementById('statMembers').textContent=members.length;var docs=0,meds=0,alerts=0;members.forEach(function(m){docs+=LS.get('docs_'+m.id,[]).length;var ml=LS.get('meds_'+m.id,[]);meds+=ml.filter(function(x){return x.active!==false}).length;alerts+=ml.filter(function(x){return x.active!==false&&daysLeft(x)<=5}).length});document.getElementById('statDocs').textContent=docs;document.getElementById('statMeds').textContent=meds;document.getElementById('statAlerts').textContent=alerts}
@@ -829,9 +1067,9 @@ function toggleNotif(){document.getElementById('notifPanel').classList.toggle('s
 document.addEventListener('click',function(e){if(!e.target.closest('#notifBtn'))document.getElementById('notifPanel').classList.remove('show')});
 
 function viewMember(id,tab){currentMember=(members||[]).find(function(m){return m.id===id})||LS.get('members',[]).find(function(m){return m.id===id});if(!currentMember)return;showPage('memberPage');if(tab&&_tabOrder.indexOf(tab)>=0){activeTab=tab;try{localStorage.setItem('fv_lasttab_'+id,tab)}catch(e){}}else{activeTab=(function(){try{return localStorage.getItem('fv_lasttab_'+id)||'profile'}catch(e){return 'profile'}})();if(_tabOrder.indexOf(activeTab)<0)activeTab='profile'}renderDetail();setupTabSwipe();mountAddFab();var fab=document.getElementById('fab');if(fab)fab.remove()}
-function renderDetail(){var m=currentMember;document.getElementById('profileBar').innerHTML=avatar(m,'profile-avatar')+'<div style="flex:1;min-width:0"><h2 style="font-size:1.2rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.name)+'</h2><div style="color:var(--text-dim);font-size:.8rem">'+[m.relation,m.dob?calcAge(m.dob)+' yrs':'',m.gender,m.bloodGroup].filter(Boolean).join(' &middot; ')+'</div></div>'+(members.length>1?'<div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-secondary btn-sm" title="Previous member" onclick="memberSwitch(-1)"><i class="fas fa-chevron-left"></i></button><button class="btn btn-secondary btn-sm" title="Next member" onclick="memberSwitch(1)"><i class="fas fa-chevron-right"></i></button></div>':'')+'<button class="btn-icon" style="flex-shrink:0" title="More actions" aria-label="More actions" onclick="openMemberMenu()"><i class="fas fa-ellipsis"></i></button>';var _meds=LS.get('meds_'+m.id,[]);var lowN=_meds.filter(function(x){return x.active!==false&&daysLeft(x)<=5}).length;var _today=new Date();_today.setHours(0,0,0,0);var expN=LS.get('docs_'+m.id,[]).filter(function(d){if(!d.expiry)return false;return Math.round((new Date(d.expiry+'T00:00:00')-_today)/86400000)<=30}).length;document.getElementById('tabsBar').innerHTML=['profile','health','visits','medications','documents','vault','loans'].map(function(t){var icons={profile:'fa-user',health:'fa-chart-line',visits:'fa-stethoscope',medications:'fa-pills',documents:'fa-folder-open',vault:'fa-shield-halved',loans:'fa-hand-holding-dollar'};var labels={profile:'Profile',health:'Health',visits:'Visits',medications:'Meds',documents:'Docs',vault:'Info',loans:'Loans'};var dot=((t==='medications'&&lowN)||(t==='documents'&&expN))?'<span class="tab-dot"></span>':'';return'<button class="tab-btn '+(t===activeTab?'active':'')+'" onclick="switchTab(\''+t+'\')" style="position:relative"><i class="fas '+icons[t]+'"></i> '+labels[t]+dot+'</button>'}).join('');renderTab()}
+function renderDetail(){var m=currentMember;document.getElementById('profileBar').innerHTML=avatar(m,'profile-avatar')+'<div style="flex:1;min-width:0"><h2 style="font-size:1.2rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.name)+'</h2><div style="color:var(--text-dim);font-size:.8rem">'+[m.relation,m.dob?calcAge(m.dob)+' yrs':'',m.gender,m.bloodGroup].filter(Boolean).join(' &middot; ')+'</div></div>'+(members.length>1?'<div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-secondary btn-sm" title="Previous member" onclick="memberSwitch(-1)"><i class="fas fa-chevron-left"></i></button><button class="btn btn-secondary btn-sm" title="Next member" onclick="memberSwitch(1)"><i class="fas fa-chevron-right"></i></button></div>':'')+'<button class="btn-icon" style="flex-shrink:0" title="More actions" aria-label="More actions" onclick="openMemberMenu()"><i class="fas fa-ellipsis"></i></button>';var _meds=LS.get('meds_'+m.id,[]);var lowN=_meds.filter(function(x){return x.active!==false&&daysLeft(x)<=5}).length;var _today=new Date();_today.setHours(0,0,0,0);var expN=LS.get('docs_'+m.id,[]).filter(function(d){if(!d.expiry)return false;return Math.round((new Date(d.expiry+'T00:00:00')-_today)/86400000)<=30}).length;document.getElementById('tabsBar').innerHTML=['profile','health','visits','medications','documents','insurance','vault','loans'].map(function(t){var icons={profile:'fa-user',health:'fa-chart-line',visits:'fa-stethoscope',medications:'fa-pills',documents:'fa-folder-open',insurance:'fa-file-shield',vault:'fa-shield-halved',loans:'fa-hand-holding-dollar'};var labels={profile:'Profile',health:'Health',visits:'Visits',medications:'Meds',documents:'Docs',insurance:'Insurance',vault:'Info',loans:'Loans'};var dot=((t==='medications'&&lowN)||(t==='documents'&&expN))?'<span class="tab-dot"></span>':'';return'<button class="tab-btn '+(t===activeTab?'active':'')+'" onclick="switchTab(\''+t+'\')" style="position:relative"><i class="fas '+icons[t]+'"></i> '+labels[t]+dot+'</button>'}).join('');renderTab()}
 function switchTab(t){activeTab=t;try{if(currentMember)localStorage.setItem('fv_lasttab_'+currentMember.id,t)}catch(e){}tabSkeleton();setTimeout(function(){renderDetail();setupTabSwipe()},16)}
-function renderTab(){var c=document.getElementById('tabContent');if(activeTab==='profile')renderProfile(c);else if(activeTab==='health')renderHealth(c);else if(activeTab==='visits')renderVisits(c);else if(activeTab==='medications')renderMeds(c);else if(activeTab==='vault')renderVault(c);else if(activeTab==='loans')renderLoans(c);else renderDocs(c)}
+function renderTab(){var c=document.getElementById('tabContent');if(activeTab==='profile')renderProfile(c);else if(activeTab==='health')renderHealth(c);else if(activeTab==='visits')renderVisits(c);else if(activeTab==='medications')renderMeds(c);else if(activeTab==='insurance')renderInsurance(c);else if(activeTab==='vault')renderVault(c);else if(activeTab==='loans')renderLoans(c);else renderDocs(c)}
 
 function renderProfile(c){var m=currentMember;function info(l,v,i){return'<div class="info-item"><label><i class="fas '+i+'" style="margin-right:4px"></i>'+l+'</label><span>'+esc(v||'\u2014')+'</span></div>'}var age=m.dob?calcAge(m.dob):'';var healthHTML=getHealthSummaryHTML();c.innerHTML='<div class="two-col"><div class="glass" style="padding:24px"><h3 style="margin-bottom:14px;font-size:.95rem"><i class="fas fa-id-card" style="color:var(--accent);margin-right:6px"></i>Personal</h3><div class="info-grid">'+info('Relation',m.relation,'fa-people-arrows')+info('Gender',m.gender,'fa-venus-mars')+info('DOB',m.dob?fmtDate(m.dob)+(age?' ('+age+' yrs)':''):'','fa-cake-candles')+info('Blood',m.bloodGroup,'fa-droplet')+info('Phone',m.phone,'fa-phone')+info('Email',m.email,'fa-envelope')+'</div></div><div class="glass" style="padding:24px"><h3 style="margin-bottom:14px;font-size:.95rem"><i class="fas fa-heart-pulse" style="color:var(--danger);margin-right:6px"></i>Emergency</h3><div class="info-grid">'+info('Emergency',m.emergencyContact,'fa-phone-volume')+info('Allergies',m.allergies,'fa-triangle-exclamation')+info('Conditions',m.medicalConditions,'fa-notes-medical')+info('Address',m.address,'fa-location-dot')+'</div><button class="btn btn-danger btn-sm" style="margin-top:14px;width:100%;justify-content:center" onclick="openEmergencyCard()"><i class="fas fa-kit-medical"></i> Emergency Card</button></div></div>'+healthHTML}
 
@@ -1611,7 +1849,7 @@ function mapLink(addr){return'https://www.google.com/maps/search/?api=1&query='+
 function renderOnboarding(){var mem=LS.get('members',[]);var anyMed=false,anyDoc=false,anyHealth=false;mem.forEach(function(m){if(LS.get('meds_'+m.id,[]).length)anyMed=true;if(LS.get('docs_'+m.id,[]).length)anyDoc=true;if(LS.get('metrics_'+m.id,[]).length)anyHealth=true});var steps=[['Add a family member',mem.length>0,'openMemberModal()'],['Log a health reading',anyHealth,mem.length?'goMemberTab(\'health\',openMetricModal,true)':'openMemberModal()'],['Add a medication',anyMed,mem.length?'goMemberTab(\'medications\',openMedModal,true)':'openMemberModal()'],['Upload a document',anyDoc,mem.length?'goMemberTab(\'documents\',addDocForCurrent,true)':'renderGeneralDocs()']];var done=steps.filter(function(s){return s[1]}).length;if(done>=steps.length)return '';return'<div class="glass" style="padding:18px 20px;margin-bottom:24px"><h3 style="font-size:.95rem;margin-bottom:4px"><i class="fas fa-rocket" style="color:var(--accent);margin-right:6px"></i>Get started ('+done+'/'+steps.length+')</h3><p style="color:var(--text-dim);font-size:.78rem;margin-bottom:12px">A few steps to set up your family vault.</p>'+steps.map(function(s){return'<div class="onb-item'+(s[1]?' done':'')+'"'+(s[1]?'':' style="cursor:pointer" onclick="'+s[2]+'"')+'><div class="oi-check">'+(s[1]?'<i class="fas fa-check" style="font-size:.7rem"></i>':'')+'</div><div style="flex:1">'+s[0]+'</div>'+(s[1]?'':'<i class="fas fa-chevron-right" style="color:var(--text-muted);font-size:.7rem"></i>')+'</div>'}).join('')+'</div>'}
 function renderMilestones(){var out=[];var today=new Date();today.setHours(0,0,0,0);LS.get('members',[]).forEach(function(m){if(m.dob){var b=new Date(m.dob+'T00:00:00');if(!isNaN(b.getTime())){var nb=new Date(today.getFullYear(),b.getMonth(),b.getDate());if(nb<today)nb=new Date(today.getFullYear()+1,b.getMonth(),b.getDate());var dd=Math.round((nb-today)/86400000);if(dd<=3){var turning=nb.getFullYear()-b.getFullYear();out.push('\ud83c\udf82 '+esc(m.name)+'\u2019s birthday '+(dd===0?'is today!':relDate(nb.toISOString().split('T')[0]))+(turning?' (turns '+turning+')':''))}}}});if(!out.length)return '';return'<div class="glass" style="padding:14px 18px;margin-bottom:24px;background:linear-gradient(135deg,rgba(108,99,255,.12),rgba(0,212,170,.08))">'+out.map(function(x){return'<div style="font-size:.9rem;padding:2px 0">'+x+'</div>'}).join('')+'</div>'}
 // ---- Tab swipe + member switch + skeleton ----
-var _tabOrder=['profile','health','visits','medications','documents','vault','loans'];
+var _tabOrder=['profile','health','visits','medications','documents','insurance','vault','loans'];
 function memberSwitch(dir){if(!currentMember||!members.length)return;var idx=-1;for(var i=0;i<members.length;i++){if(members[i].id===currentMember.id){idx=i;break}}if(idx<0)return;var ni=(idx+dir+members.length)%members.length;if(members[ni])viewMember(members[ni].id)}
 function setupTabSwipe(){var el=document.getElementById('tabContent');if(!el||el._swipe)return;el._swipe=true;var x0=null,y0=null;el.addEventListener('touchstart',function(e){var t=e.touches[0];x0=t.clientX;y0=t.clientY},{passive:true});el.addEventListener('touchend',function(e){if(x0==null)return;var t=e.changedTouches[0];var dx=t.clientX-x0,dy=t.clientY-y0;x0=null;if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.4)return;var i=_tabOrder.indexOf(activeTab);if(i<0)return;if(dx<0&&i<_tabOrder.length-1){switchTab(_tabOrder[i+1])}else if(dx>0&&i>0){switchTab(_tabOrder[i-1])}},{passive:true})}
 function tabSkeleton(){var c=document.getElementById('tabContent');if(c)c.innerHTML='<div class="skel" style="height:34px;width:52%;margin-bottom:14px"></div><div class="skel" style="height:78px;margin-bottom:11px"></div><div class="skel" style="height:78px;margin-bottom:11px;opacity:.75"></div><div class="skel" style="height:78px;opacity:.5"></div>'}
